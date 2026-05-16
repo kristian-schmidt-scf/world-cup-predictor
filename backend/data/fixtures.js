@@ -1,6 +1,8 @@
 // Static WC 2026 fixture data. Groups confirmed from December 5, 2025 draw.
 // Dates are approximate (official FIFA schedule; group stage June 11–27).
 // Matchday 3 matches within each group kick off simultaneously.
+// Kickoff times are approximate (UTC): -A matches at 16:00Z, -B at 22:00Z.
+// Update from the official FIFA match schedule once published.
 
 export const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
 
@@ -42,14 +44,14 @@ function groupMatches(group) {
   const d = GROUP_DATES[group];
   return [
     // Matchday 1
-    { id: `${group}-MD1-A`, group, matchday: 1, home: t1, away: t2, date: d.md1, stage: 'group' },
-    { id: `${group}-MD1-B`, group, matchday: 1, home: t3, away: t4, date: d.md1, stage: 'group' },
+    { id: `${group}-MD1-A`, group, matchday: 1, home: t1, away: t2, date: d.md1, kickoff: `${d.md1}T16:00:00Z`, stage: 'group' },
+    { id: `${group}-MD1-B`, group, matchday: 1, home: t3, away: t4, date: d.md1, kickoff: `${d.md1}T22:00:00Z`, stage: 'group' },
     // Matchday 2
-    { id: `${group}-MD2-A`, group, matchday: 2, home: t1, away: t3, date: d.md2, stage: 'group' },
-    { id: `${group}-MD2-B`, group, matchday: 2, home: t2, away: t4, date: d.md2, stage: 'group' },
-    // Matchday 3 (simultaneous)
-    { id: `${group}-MD3-A`, group, matchday: 3, home: t1, away: t4, date: d.md3, stage: 'group' },
-    { id: `${group}-MD3-B`, group, matchday: 3, home: t2, away: t3, date: d.md3, stage: 'group' },
+    { id: `${group}-MD2-A`, group, matchday: 2, home: t1, away: t3, date: d.md2, kickoff: `${d.md2}T16:00:00Z`, stage: 'group' },
+    { id: `${group}-MD2-B`, group, matchday: 2, home: t2, away: t4, date: d.md2, kickoff: `${d.md2}T22:00:00Z`, stage: 'group' },
+    // Matchday 3 (simultaneous kick-offs)
+    { id: `${group}-MD3-A`, group, matchday: 3, home: t1, away: t4, date: d.md3, kickoff: `${d.md3}T22:00:00Z`, stage: 'group' },
+    { id: `${group}-MD3-B`, group, matchday: 3, home: t2, away: t3, date: d.md3, kickoff: `${d.md3}T22:00:00Z`, stage: 'group' },
   ];
 }
 
