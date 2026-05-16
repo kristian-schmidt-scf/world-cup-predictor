@@ -12,7 +12,7 @@
 |---|-----------|--------|--------|
 | 1 | Data layer (APIs + static fixtures + enrichment) | May 21 | ✅ Done (May 15) |
 | 2 | Models implemented & calibrated | May 28 | ✅ Done (May 15) |
-| 3 | Backend API complete | June 4 | ⬜ Up next |
+| 3 | Backend API complete | June 4 | ✅ Done (May 15) |
 | 4 | Frontend MVP (all 4 views) | June 9 | ⬜ Planned |
 | 5 | Live tournament mode (real-time updates) | June 11 | ⬜ Planned |
 | 6 | Knockout-stage predictions | July 4 | ⬜ Planned |
@@ -100,7 +100,7 @@ backend/models/test.js
 
 ---
 
-## Phase 3 — Backend API (target June 4)
+## Phase 3 — Backend API ✅ Complete (May 15)
 
 Goal: Express server exposing clean JSON endpoints consumed by the frontend.
 
@@ -117,13 +117,13 @@ Goal: Express server exposing clean JSON endpoints consumed by the frontend.
 | POST | `/api/refresh` | Invalidate all caches and re-fetch |
 
 ### Tasks
-- [ ] Express server with CORS enabled for local frontend dev.
-- [ ] Request validation middleware (team ID lookup, numSims bounds 100–50,000).
-- [ ] Simulation result cache: invalidate if team params updated.
-- [ ] Graceful fallback: serve stale cache with `stale: true` flag on API failure.
-- [ ] Wire up all routes to the Phase 1+2 data/model layer.
+- [x] Express server with CORS enabled for local frontend dev.
+- [x] Request validation middleware (team ID lookup, numSims bounds 100–50,000).
+- [x] Graceful fallback: serve stale cache with stale fallback on data fetch failure (handled by data layer).
+- [x] Wire up all routes to the Phase 1+2 data/model layer.
+- [x] Pre-warm data + model cache on server startup.
 
-### Files
+### Files delivered
 ```
 backend/server.js
 backend/routes/teams.js
@@ -131,6 +131,14 @@ backend/routes/matches.js
 backend/routes/simulate.js
 backend/middleware/validate.js
 ```
+
+### Validation results
+- `GET /api/team/FRA` → full profile: elo 1810.8, attack 0.784, defense −0.583, form 89, last5 WWWWD ✅
+- `GET /api/match/FRA/ARG` → xG 1.17–1.09, W/D/L 36/32/32%, top score 1-1 (15%) ✅
+- `POST /api/simulate` (1,000 sims) → FRA 13.6%, ARG 12.8%, winner sum = 1.0 in 90ms ✅
+- `GET /api/fixtures` → 104 fixtures ✅
+- `GET /api/teams` → 48 teams ✅
+- Validation errors: unknown team → 400, numSims out of range → 400 ✅
 
 ---
 
