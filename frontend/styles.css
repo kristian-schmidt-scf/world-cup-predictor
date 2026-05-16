@@ -108,8 +108,12 @@ a { color: var(--accent); }
 }
 .badge-group    { background: rgba(148,163,184,.15); color: var(--muted); }
 .badge-upcoming { background: rgba(148,163,184,.12); color: var(--muted); }
-.badge-live     { background: rgba(239,68,68,.2);    color: var(--loss); }
-.badge-done     { background: rgba(34,197,94,.15);   color: var(--win); }
+.badge-live     { background: rgba(239,68,68,.2); color: var(--loss); animation: pulse-live 1.5s ease-in-out infinite; }
+.badge-done     { background: rgba(34,197,94,.15); color: var(--win); }
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .55; }
+}
 
 /* ── Probability colors ────────────────────────────────────────────────────── */
 .p-high { color: var(--win);  font-weight: 700; }

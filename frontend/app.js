@@ -92,6 +92,40 @@ const pClass  = v  => v == null ? '' : v >= 0.10 ? 'p-high' : v >= 0.03 ? 'p-med
 const fmtDate = ds => ds ? new Date(ds).toLocaleDateString('en-GB', { month:'short', day:'numeric' }) : '—';
 const teamProbs = id => state.simResults?.probs?.[id] ?? null;
 
+// Returns the status badge HTML for a fixture based on time and locked state.
+function countdownBadge(f) {
+  const locked = state.lockedResults[matchKey(f)];
+  if (locked) return `<span class="badge badge-done">FT ${locked.goalsA}–${locked.goalsB}</span>`;
+
+  if (!f.kickoff) return `<span class="badge badge-upcoming">Upcoming</span>`;
+
+  const now = Date.now();
+  const ko  = new Date(f.kickoff).getTime();
+  const end = ko + 110 * 60 * 1000; // 90 min + 20 min buffer for stoppages
+
+  if (now >= ko && now < end) {
+    return `<span class="badge badge-live">LIVE</span>`;
+  }
+  if (now >= end) {
+    return `<span class="badge badge-done">FT</span>`;
+  }
+
+  // Upcoming — show countdown
+  const diff  = ko - now;
+  const days  = Math.floor(diff / 86_400_000);
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+  const mins  = Math.floor((diff % 3_600_000)  / 60_000);
+
+  const label = days > 0 ? `${days}d ${hours}h`
+              : hours > 0 ? `${hours}h ${mins}m`
+              : `${mins}m`;
+
+  const kickoffLocal = new Date(f.kickoff).toLocaleString('en-GB', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  return `<span class="badge badge-upcoming" title="Kick-off: ${kickoffLocal}">${label}</span>`;
+}
+
 function setSimStatus(msg) {
   document.getElementById('sim-status').textContent = msg;
 }
@@ -304,10 +338,6 @@ function lockSectionHtml(f) {
 
 function fixtureRowHtml(f) {
   const locked = state.lockedResults[matchKey(f)];
-  const statusBadge = locked
-    ? `<span class="badge badge-done">FT ${locked.goalsA}–${locked.goalsB}</span>`
-    : `<span class="badge badge-upcoming">Upcoming</span>`;
-
   return `
     <tr class="fixture-row${locked ? ' row-locked' : ''}" data-match="${f.id}">
       <td>${fmtDate(f.date)}</td>
@@ -316,7 +346,7 @@ function fixtureRowHtml(f) {
       <td>${flag(f.away)}<strong>${f.away}</strong></td>
       <td id="xg-${f.id}">—</td>
       <td id="wdl-${f.id}">—</td>
-      <td id="badge-${f.id}">${statusBadge}</td>
+      <td id="badge-${f.id}">${countdownBadge(f)}</td>
     </tr>
     <tr class="fixture-detail-row" id="detail-${f.id}">
       <td colspan="7">
@@ -423,6 +453,21 @@ async function afterResultChange(results) {
   }
 }
 
+let countdownTimer = null;
+
+function startCountdownTicker() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    const group = state.matchGroup;
+    state.fixtures
+      .filter(f => f.stage === 'group' && f.group === group)
+      .forEach(f => {
+        const el = document.getElementById(`badge-${f.id}`);
+        if (el) el.innerHTML = countdownBadge(f);
+      });
+  }, 30_000); // refresh every 30 seconds
+}
+
 function initMatchesView() {
   document.querySelectorAll('#group-tabs .group-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -433,6 +478,7 @@ function initMatchesView() {
     });
   });
   renderMatchesGroup('A');
+  startCountdownTicker();
 }
 
 // Delegate lock/unlock button clicks for the matches view.
