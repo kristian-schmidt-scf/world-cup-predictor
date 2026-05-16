@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WC 2026 Predictor</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">WC 2026 Predictor</div>
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="teams">Teams</button>
+        <button class="tab-btn" data-tab="matches">Matches</button>
+        <button class="tab-btn" data-tab="bracket">Bracket</button>
+        <button class="tab-btn" data-tab="scenario">Scenario</button>
+      </nav>
+      <div class="sim-status" id="sim-status"></div>
+    </div>
+  </header>
+
+  <main class="main-content">
+
+    <!-- Loading overlay -->
+    <div id="loading" class="loading-overlay">
+      <div class="spinner"></div>
+      <p>Loading data...</p>
+    </div>
+
+    <!-- ── TEAMS ──────────────────────────────────────────────────────────── -->
+    <div id="tab-teams" class="tab-pane active">
+      <div class="teams-layout">
+
+        <div class="teams-left">
+          <div class="section-header">
+            <h2>All 48 Teams</h2>
+            <input type="text" id="team-search" placeholder="Search team..." class="search-input">
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="teams-table">
+              <thead>
+                <tr>
+                  <th data-sort="group">Grp <span class="sort-icon">↕</span></th>
+                  <th data-sort="name">Team <span class="sort-icon">↕</span></th>
+                  <th data-sort="elo" class="col-active">Elo <span class="sort-icon">↓</span></th>
+                  <th data-sort="attack">Attack <span class="sort-icon">↕</span></th>
+                  <th data-sort="defense">Defense <span class="sort-icon">↕</span></th>
+                  <th data-sort="formScore">Form <span class="sort-icon">↕</span></th>
+                  <th data-sort="marketValueM">Market €M <span class="sort-icon">↕</span></th>
+                  <th data-sort="winner">Win% <span class="sort-icon">↕</span></th>
+                </tr>
+              </thead>
+              <tbody id="teams-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside class="teams-right" id="team-detail">
+          <div class="empty-state"><p>Select a team to see details</p></div>
+        </aside>
+
+      </div>
+    </div>
+
+    <!-- ── MATCHES ────────────────────────────────────────────────────────── -->
+    <div id="tab-matches" class="tab-pane">
+      <div class="group-tabs" id="group-tabs">
+        <button class="group-tab active" data-group="A">A</button>
+        <button class="group-tab" data-group="B">B</button>
+        <button class="group-tab" data-group="C">C</button>
+        <button class="group-tab" data-group="D">D</button>
+        <button class="group-tab" data-group="E">E</button>
+        <button class="group-tab" data-group="F">F</button>
+        <button class="group-tab" data-group="G">G</button>
+        <button class="group-tab" data-group="H">H</button>
+        <button class="group-tab" data-group="I">I</button>
+        <button class="group-tab" data-group="J">J</button>
+        <button class="group-tab" data-group="K">K</button>
+        <button class="group-tab" data-group="L">L</button>
+      </div>
+      <div id="matches-content"></div>
+    </div>
+
+    <!-- ── BRACKET ────────────────────────────────────────────────────────── -->
+    <div id="tab-bracket" class="tab-pane">
+      <div class="bracket-toolbar">
+        <h2>Tournament Odds</h2>
+        <button class="btn-primary" id="run-sim-btn">Run 10,000 Simulations</button>
+        <span class="sim-info" id="bracket-sim-info"></span>
+      </div>
+      <div id="champion-cards" class="champion-cards"></div>
+      <div class="table-wrap">
+        <table class="data-table" id="bracket-table">
+          <thead>
+            <tr>
+              <th>Grp</th>
+              <th>Team</th>
+              <th>R16</th>
+              <th>QF</th>
+              <th>SF</th>
+              <th>Final</th>
+              <th>Winner</th>
+            </tr>
+          </thead>
+          <tbody id="bracket-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── SCENARIO ───────────────────────────────────────────────────────── -->
+    <div id="tab-scenario" class="tab-pane">
+      <div class="scenario-layout">
+
+        <div class="scenario-controls">
+          <h2>Scenario Explorer</h2>
+          <p class="help-text">Lock group match results to explore how outcomes shift tournament probabilities.</p>
+          <div class="group-tabs" id="scenario-group-tabs">
+            <button class="group-tab active" data-group="A">A</button>
+            <button class="group-tab" data-group="B">B</button>
+            <button class="group-tab" data-group="C">C</button>
+            <button class="group-tab" data-group="D">D</button>
+            <button class="group-tab" data-group="E">E</button>
+            <button class="group-tab" data-group="F">F</button>
+            <button class="group-tab" data-group="G">G</button>
+            <button class="group-tab" data-group="H">H</button>
+            <button class="group-tab" data-group="I">I</button>
+            <button class="group-tab" data-group="J">J</button>
+            <button class="group-tab" data-group="K">K</button>
+            <button class="group-tab" data-group="L">L</button>
+          </div>
+          <div id="scenario-matches"></div>
+          <div class="scenario-actions">
+            <button class="btn-primary" id="run-scenario-btn">Run Scenario</button>
+            <button class="btn-secondary" id="clear-scenario-btn">Clear All</button>
+          </div>
+        </div>
+
+        <div class="scenario-results" id="scenario-results">
+          <div class="empty-state"><p>Lock a match result and run the scenario to see the impact.</p></div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

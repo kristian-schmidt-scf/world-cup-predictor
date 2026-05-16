@@ -1,10 +1,13 @@
 import express from 'express';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { loadAll } from './data/index.js';
 import { estimateParams } from './models/hierarchicalBayesian.js';
 import teamsRouter    from './routes/teams.js';
 import matchesRouter  from './routes/matches.js';
 import simulateRouter from './routes/simulate.js';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
 const app  = express();
 
@@ -18,6 +21,9 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+
+// Frontend static files
+app.use(express.static(join(__dirname, '../frontend')));
 
 // API routes
 app.use('/api', teamsRouter);
