@@ -273,8 +273,9 @@ a { color: var(--accent); }
 .delta-neg { color: var(--loss); font-size: 11px; font-weight: 700; }
 
 /* ── Flags ─────────────────────────────────────────────────────────────────── */
-.flag { font-style: normal; display: inline-block; }
-.champion-flag { font-size: 32px; line-height: 1; margin-bottom: 4px; }
+.flag-img { height: 13px; width: auto; vertical-align: middle; border-radius: 1px; }
+.champion-flag { margin-bottom: 6px; }
+.champion-flag .flag-img { height: 30px; }
 
 /* ── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
