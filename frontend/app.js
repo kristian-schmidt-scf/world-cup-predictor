@@ -6,6 +6,22 @@ const STAGE_LABELS = [
   ['r16', 'R16'], ['qf', 'QF'], ['sf', 'SF'], ['final', 'Final'], ['winner', 'Winner'],
 ];
 
+const FLAGS = {
+  MEX:'🇲🇽', RSA:'🇿🇦', KOR:'🇰🇷', CZE:'🇨🇿',
+  CAN:'🇨🇦', BIH:'🇧🇦', QAT:'🇶🇦', SUI:'🇨🇭',
+  BRA:'🇧🇷', MAR:'🇲🇦', HAI:'🇭🇹', SCO:'🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+  USA:'🇺🇸', PRY:'🇵🇾', AUS:'🇦🇺', TUR:'🇹🇷',
+  GER:'🇩🇪', CUW:'🇨🇼', CIV:'🇨🇮', ECU:'🇪🇨',
+  NED:'🇳🇱', JPN:'🇯🇵', SWE:'🇸🇪', TUN:'🇹🇳',
+  BEL:'🇧🇪', EGY:'🇪🇬', IRN:'🇮🇷', NZL:'🇳🇿',
+  ESP:'🇪🇸', CPV:'🇨🇻', KSA:'🇸🇦', URU:'🇺🇾',
+  FRA:'🇫🇷', SEN:'🇸🇳', IRQ:'🇮🇶', NOR:'🇳🇴',
+  ARG:'🇦🇷', ALG:'🇩🇿', AUT:'🇦🇹', JOR:'🇯🇴',
+  POR:'🇵🇹', COD:'🇨🇩', UZB:'🇺🇿', COL:'🇨🇴',
+  ENG:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', CRO:'🇭🇷', GHA:'🇬🇭', PAN:'🇵🇦',
+};
+const flag = id => FLAGS[id] ?? '';
+
 // ── State ────────────────────────────────────────────────────────────────────
 const state = {
   teams:          [],
@@ -95,7 +111,7 @@ function renderTeamsTable() {
     return `
       <tr class="clickable${sel ? ' row-selected' : ''}" data-team="${t.id}">
         <td><span class="badge badge-group">${t.group}</span></td>
-        <td><strong>${t.id}</strong> <span style="color:var(--muted);font-size:12px">${t.name}</span></td>
+        <td><span class="flag">${flag(t.id)}</span> <strong>${t.id}</strong> <span style="color:var(--muted);font-size:12px">${t.name}</span></td>
         <td>${t.elo ?? '—'}</td>
         <td>${t.attack  != null ? t.attack.toFixed(3)  : '—'}</td>
         <td>${t.defense != null ? t.defense.toFixed(3) : '—'}</td>
@@ -142,7 +158,7 @@ function renderTeamDetail() {
   const record = t.record ? `${t.record.wins}W ${t.record.draws}D ${t.record.losses}L` : '—';
 
   panel.innerHTML = `
-    <div class="team-name">${t.name}</div>
+    <div class="team-name"><span class="flag">${flag(t.id)}</span> ${t.name}</div>
     <div class="team-meta">Group ${t.group} &middot; ${t.confederation} &middot; FIFA #${t.fifaRank}</div>
 
     <div class="team-stats">
@@ -237,9 +253,9 @@ function fixtureRowHtml(f) {
   return `
     <tr class="fixture-row" data-match="${f.id}">
       <td>${fmtDate(f.date)}</td>
-      <td><strong>${f.home}</strong></td>
+      <td><span class="flag">${flag(f.home)}</span> <strong>${f.home}</strong></td>
       <td style="color:var(--muted)">vs</td>
-      <td><strong>${f.away}</strong></td>
+      <td><span class="flag">${flag(f.away)}</span> <strong>${f.away}</strong></td>
       <td id="xg-${f.id}">—</td>
       <td id="wdl-${f.id}">—</td>
       <td><span class="badge badge-upcoming">Upcoming</span></td>
@@ -307,7 +323,7 @@ function renderMatchDetailPanel(f, pred) {
   const [w, d, l] = [pred.pWin, pred.pDraw, pred.pLoss];
 
   metaEl.innerHTML = `
-    <div style="font-weight:700;color:var(--text);margin-bottom:10px">${tn(f.home)} vs ${tn(f.away)}</div>
+    <div style="font-weight:700;color:var(--text);margin-bottom:10px">${flag(f.home)} ${tn(f.home)} vs ${flag(f.away)} ${tn(f.away)}</div>
     <div class="match-meta-label">Expected goals</div>
     <div class="match-meta-val">${pred.xgA} – ${pred.xgB}</div>
     <div class="match-meta-label">${f.home} win</div>
@@ -370,6 +386,7 @@ function renderBracket() {
     return `
       <div class="champion-card">
         <div class="champion-rank">${ranks[i]}</div>
+        <div class="champion-flag">${flag(t.id)}</div>
         <div class="champion-id">${t.id}</div>
         <div class="champion-name">${t.name}</div>
         <div class="champion-pct">${pct}%</div>
@@ -393,7 +410,7 @@ function renderBracket() {
     return `
       <tr>
         <td><span class="badge badge-group">${t.group}</span></td>
-        <td><strong>${t.id}</strong> <span style="color:var(--muted);font-size:12px">${t.name}</span></td>
+        <td><span class="flag">${flag(t.id)}</span> <strong>${t.id}</strong> <span style="color:var(--muted);font-size:12px">${t.name}</span></td>
         ${cell(pr.r16)}${cell(pr.qf)}${cell(pr.sf)}${cell(pr.final)}${cell(pr.winner)}
       </tr>`;
   }).join('');
@@ -445,7 +462,7 @@ function renderScenarioMatches(group) {
     return `
       <div class="scenario-match">
         <div class="scenario-teams">
-          ${hn} vs ${an}
+          ${flag(f.home)} ${hn} vs ${flag(f.away)} ${an}
           <span class="md-label">MD${f.matchday}</span>
         </div>
         <div class="result-btns">
@@ -535,7 +552,7 @@ function renderScenarioResults() {
             const col = k => `<td>${fmtPct(bp[k])} → <strong>${fmtPct(sp[k])}</strong>${delta(bp[k], sp[k])}</td>`;
             return `
               <tr>
-                <td><strong>${t.id}</strong> <span style="color:var(--muted);font-size:12px">${t.name}</span></td>
+                <td><span class="flag">${flag(t.id)}</span> <strong>${t.id}</strong> <span style="color:var(--muted);font-size:12px">${t.name}</span></td>
                 ${col('r16')}${col('final')}${col('winner')}
               </tr>`;
           }).join('')}
