@@ -138,6 +138,7 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 - **All features must be developed on a feature branch**, named `feature/<short-description>` (e.g. `feature/live-score-ingestion`). Never commit feature work directly to `master`.
 - When a feature is complete, ask the user: *"Ready to push, open a PR, and merge into master?"* — do not push or merge without explicit confirmation.
 - One GitHub issue per feature branch. Reference the issue number in the PR description.
+- When closing an issue, post a comment on the issue summarising what was implemented: key files added/changed, approach taken, and anything deliberately left out of scope.
 
 ## Notes & Constraints
 - All WC matches are at neutral venues — home advantage is zeroed in all predictions
