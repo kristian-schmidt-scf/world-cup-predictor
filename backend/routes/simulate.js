@@ -3,6 +3,7 @@ import { loadAll, refreshAll, getAllFixtures } from '../data/index.js';
 import { estimateParams, invalidateParams } from '../models/hierarchicalBayesian.js';
 import { runMonteCarlo } from '../models/tournamentSimulation.js';
 import { validateNumSims } from '../middleware/validate.js';
+import { getResults } from '../data/results.js';
 
 const router = Router();
 
@@ -14,8 +15,11 @@ router.post('/simulate', validateNumSims, async (req, res, next) => {
     const { matches, elo, squadStats } = await loadAll();
     const params = estimateParams(matches, elo, squadStats);
 
+    // Real results always override scenario locks
+    const merged = { ...lockedResults, ...getResults() };
+
     const t0 = Date.now();
-    const { probs, meta } = runMonteCarlo(numSims, params, lockedResults);
+    const { probs, meta } = runMonteCarlo(numSims, params, merged);
     res.json({ probs, meta: { ...meta, elapsedMs: Date.now() - t0 } });
   } catch (err) {
     next(err);

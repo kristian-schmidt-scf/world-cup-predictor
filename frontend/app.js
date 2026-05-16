@@ -33,9 +33,10 @@ const state = {
   simResults:     null,
   simMeta:        null,
   scenarioResults: null,
-  lockedResults:  {},          // { matchKey: { goalsA, goalsB } }
+  lockedResults:  {},   // real match results persisted on server { matchKey: { goalsA, goalsB } }
+  scenarioLocks:  {},   // hypothetical scenario locks (Scenario Explorer only)
   selectedTeamId: null,
-  matchCache:     {},          // { 'FRA-ARG': prediction }
+  matchCache:     {},   // { 'FRA-ARG': prediction }
   expandedMatch:  null,
   matchGroup:     'A',
   scenarioGroup:  'A',
@@ -50,12 +51,31 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-async function simulate(numSims, lockedResults = {}) {
+async function simulate(numSims, scenarioLocks = {}) {
   return api('/simulate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ numSims, lockedResults }),
+    body: JSON.stringify({ numSims, lockedResults: scenarioLocks }),
   });
+}
+
+async function fetchResults() {
+  const data = await api('/results');
+  return data.results;
+}
+
+async function lockResult(matchId, goalsA, goalsB) {
+  const data = await api('/results', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ matchId, goalsA, goalsB }),
+  });
+  return data.results;
+}
+
+async function unlockResult(matchId) {
+  const data = await api(`/results/${encodeURIComponent(matchId)}`, { method: 'DELETE' });
+  return data.results;
 }
 
 async function fetchMatchPrediction(a, b) {
@@ -251,22 +271,60 @@ async function renderMatchesGroup(group) {
   fixtures.forEach(f => prefetchPrediction(f));
 }
 
-function fixtureRowHtml(f) {
-  const name = id => state.teamById[id]?.name ?? id;
+function matchKey(f) { return `${f.group}-${f.home}-${f.away}`; }
+
+function lockSectionHtml(f) {
+  const key    = matchKey(f);
+  const locked = state.lockedResults[key];
+  const hn     = state.teamById[f.home]?.name ?? f.home;
+  const an     = state.teamById[f.away]?.name ?? f.away;
+
+  if (locked) {
+    return `
+      <div class="lock-section lock-section--locked">
+        <span class="lock-label">Result locked</span>
+        <span class="lock-score">${flag(f.home)} ${hn} <strong>${locked.goalsA} – ${locked.goalsB}</strong> ${an} ${flag(f.away)}</span>
+        <button class="lock-btn lock-btn--unlock" data-key="${key}">Unlock</button>
+      </div>`;
+  }
+
   return `
-    <tr class="fixture-row" data-match="${f.id}">
+    <div class="lock-section">
+      <span class="lock-label">Lock result</span>
+      <div class="lock-inputs">
+        ${flag(f.home)} <span class="lock-team">${f.home}</span>
+        <input class="lock-score-input" id="goals-a-${f.id}" type="number" min="0" max="20" value="0">
+        <span class="lock-sep">–</span>
+        <input class="lock-score-input" id="goals-b-${f.id}" type="number" min="0" max="20" value="0">
+        <span class="lock-team">${f.away}</span> ${flag(f.away)}
+        <button class="lock-btn lock-btn--lock" data-key="${key}" data-fid="${f.id}">Lock</button>
+      </div>
+    </div>`;
+}
+
+function fixtureRowHtml(f) {
+  const locked = state.lockedResults[matchKey(f)];
+  const statusBadge = locked
+    ? `<span class="badge badge-done">FT ${locked.goalsA}–${locked.goalsB}</span>`
+    : `<span class="badge badge-upcoming">Upcoming</span>`;
+
+  return `
+    <tr class="fixture-row${locked ? ' row-locked' : ''}" data-match="${f.id}">
       <td>${fmtDate(f.date)}</td>
       <td>${flag(f.home)}<strong>${f.home}</strong></td>
       <td style="color:var(--muted)">vs</td>
       <td>${flag(f.away)}<strong>${f.away}</strong></td>
       <td id="xg-${f.id}">—</td>
       <td id="wdl-${f.id}">—</td>
-      <td><span class="badge badge-upcoming">Upcoming</span></td>
+      <td id="badge-${f.id}">${statusBadge}</td>
     </tr>
     <tr class="fixture-detail-row" id="detail-${f.id}">
       <td colspan="7">
         <div class="match-detail-inner">
-          <div id="meta-${f.id}" style="color:var(--muted);font-size:13px">Loading...</div>
+          <div>
+            <div id="lock-${f.id}">${lockSectionHtml(f)}</div>
+            <div id="meta-${f.id}" style="color:var(--muted);font-size:13px;margin-top:12px">Loading...</div>
+          </div>
           <div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
               Score probabilities — top 10 most likely scorelines
@@ -347,6 +405,24 @@ function renderMatchDetailPanel(f, pred) {
   createScoreHistogram(`hist-${f.id}`, pred.topScores);
 }
 
+// Called after any real result is locked or unlocked — re-sims and refreshes all views.
+async function afterResultChange(results) {
+  state.lockedResults = results;
+  await renderMatchesGroup(state.matchGroup);
+  setSimStatus('Updating simulation...');
+  try {
+    const data = await simulate(10_000);
+    state.simResults = data;
+    state.simMeta    = data.meta;
+    setSimStatus(`${data.meta.n.toLocaleString()} sims · ${data.meta.elapsedMs}ms`);
+    renderTeamsTable();
+    if (state.selectedTeamId) renderTeamDetail();
+    if (document.getElementById('tab-bracket').classList.contains('active')) renderBracket();
+  } catch {
+    setSimStatus('Simulation failed');
+  }
+}
+
 function initMatchesView() {
   document.querySelectorAll('#group-tabs .group-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -358,6 +434,43 @@ function initMatchesView() {
   });
   renderMatchesGroup('A');
 }
+
+// Delegate lock/unlock button clicks for the matches view.
+document.addEventListener('click', async e => {
+  const lockBtn   = e.target.closest('.lock-btn--lock');
+  const unlockBtn = e.target.closest('.lock-btn--unlock');
+
+  if (lockBtn) {
+    e.stopPropagation();
+    const key  = lockBtn.dataset.key;
+    const fid  = lockBtn.dataset.fid;
+    const a    = parseInt(document.getElementById(`goals-a-${fid}`)?.value ?? 0, 10);
+    const b    = parseInt(document.getElementById(`goals-b-${fid}`)?.value ?? 0, 10);
+    lockBtn.disabled = true;
+    lockBtn.textContent = '...';
+    try {
+      const results = await lockResult(key, a, b);
+      await afterResultChange(results);
+    } catch (err) {
+      lockBtn.disabled = false;
+      lockBtn.textContent = 'Lock';
+      alert(`Failed to lock result: ${err.message}`);
+    }
+  }
+
+  if (unlockBtn) {
+    e.stopPropagation();
+    const key = unlockBtn.dataset.key;
+    unlockBtn.disabled = true;
+    try {
+      const results = await unlockResult(key);
+      await afterResultChange(results);
+    } catch (err) {
+      unlockBtn.disabled = false;
+      alert(`Failed to unlock: ${err.message}`);
+    }
+  }
+});
 
 // ════════════════════════════════════════════════════════════════════════════
 // BRACKET VIEW
@@ -446,16 +559,23 @@ function initBracketView() {
 // SCENARIO VIEW
 // ════════════════════════════════════════════════════════════════════════════
 
-function matchKey(f) { return `${f.group}-${f.home}-${f.away}`; }
-
 function renderScenarioMatches(group) {
   state.scenarioGroup = group;
   const container = document.getElementById('scenario-matches');
-  const fixtures  = state.fixtures.filter(f => f.stage === 'group' && f.group === group);
+
+  // Only show matches not already locked with a real result
+  const fixtures = state.fixtures.filter(
+    f => f.stage === 'group' && f.group === group && !state.lockedResults[matchKey(f)]
+  );
+
+  if (!fixtures.length) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 0">All matches in this group have real results locked.</p>';
+    return;
+  }
 
   container.innerHTML = fixtures.map(f => {
     const key    = matchKey(f);
-    const locked = state.lockedResults[key];
+    const locked = state.scenarioLocks[key];
     const hn     = state.teamById[f.home]?.name ?? f.home;
     const an     = state.teamById[f.away]?.name ?? f.away;
     const isWin  = locked && locked.goalsA > locked.goalsB;
@@ -482,10 +602,10 @@ function renderScenarioMatches(group) {
       const key     = btn.dataset.key;
       const outcome = btn.dataset.outcome;
       if (outcome === 'clear') {
-        delete state.lockedResults[key];
+        delete state.scenarioLocks[key];
       } else {
         const scores = { win: { goalsA:2, goalsB:0 }, draw: { goalsA:0, goalsB:0 }, loss: { goalsA:0, goalsB:2 } };
-        state.lockedResults[key] = scores[outcome];
+        state.scenarioLocks[key] = scores[outcome];
       }
       renderScenarioMatches(group);
     });
@@ -497,7 +617,7 @@ async function runScenario() {
   btn.disabled = true;
   btn.textContent = 'Running...';
   try {
-    const data = await simulate(10_000, state.lockedResults);
+    const data = await simulate(10_000, state.scenarioLocks);
     state.scenarioResults = data;
     renderScenarioResults();
   } catch (err) {
@@ -518,7 +638,7 @@ function renderScenarioResults() {
     return;
   }
 
-  const n = Object.keys(state.lockedResults).length;
+  const n = Object.keys(state.scenarioLocks).length;
 
   const delta = (bv, sv) => {
     if (bv == null || sv == null) return '';
@@ -576,7 +696,7 @@ function initScenarioView() {
   document.getElementById('run-scenario-btn').addEventListener('click', runScenario);
 
   document.getElementById('clear-scenario-btn').addEventListener('click', () => {
-    state.lockedResults = {};
+    state.scenarioLocks = {};
     state.scenarioResults = null;
     renderScenarioMatches(state.scenarioGroup);
     document.getElementById('scenario-results').innerHTML =
@@ -592,13 +712,15 @@ function initScenarioView() {
 
 async function init() {
   try {
-    const [teamsData, fixturesData] = await Promise.all([
+    const [teamsData, fixturesData, resultsData] = await Promise.all([
       api('/teams'),
       api('/fixtures'),
+      fetchResults(),
     ]);
-    state.teams    = teamsData.teams;
-    state.fixtures = fixturesData.fixtures;
-    state.teamById = Object.fromEntries(state.teams.map(t => [t.id, t]));
+    state.teams         = teamsData.teams;
+    state.fixtures      = fixturesData.fixtures;
+    state.teamById      = Object.fromEntries(state.teams.map(t => [t.id, t]));
+    state.lockedResults = resultsData;
 
     document.getElementById('loading').classList.add('hidden');
 
