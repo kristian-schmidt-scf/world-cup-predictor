@@ -11,7 +11,8 @@ const RESULTS_URL =
 
 const CACHE_KEY = 'historical_matches';
 const CACHE_TTL_HOURS = 24;
-const CUTOFF_DATE = '2022-01-01';
+// Elo needs longer history for calibration; form only uses last 10 matches anyway
+const CUTOFF_DATE = '2010-01-01';
 
 // Simple CSV parser — avoids a dependency for a straightforward format.
 function parseCsv(text) {
