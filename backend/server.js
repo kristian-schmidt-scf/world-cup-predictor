@@ -6,6 +6,7 @@ import { estimateParams } from './models/hierarchicalBayesian.js';
 import teamsRouter    from './routes/teams.js';
 import matchesRouter  from './routes/matches.js';
 import simulateRouter from './routes/simulate.js';
+import resultsRouter  from './routes/results.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
@@ -29,6 +30,7 @@ app.use(express.static(join(__dirname, '../frontend')));
 app.use('/api', teamsRouter);
 app.use('/api', matchesRouter);
 app.use('/api', simulateRouter);
+app.use('/api', resultsRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
