@@ -15,7 +15,7 @@ export const GROUP_TEAMS = {
   G: ['BEL','IRN','EGY','NZL'],
   H: ['ESP','URU','KSA','CPV'],
   I: ['FRA','SEN','NOR','IRQ'],
-  J: ['ARG','COL','AUT','ALG'],
+  J: ['ARG','JOR','AUT','ALG'],
   K: ['POR','COL','COD','UZB'],
   L: ['ENG','CRO','GHA','PAN'],
 };
