@@ -110,15 +110,27 @@ function simulateOnce(params, lockedResults = {}) {
   const groupFirsts   = [];
   const groupSeconds  = [];
   const groupThirds   = [];
+  const groupResults  = {}; // group → [{ id, pts, gd, finish, qualified }]
 
   for (const group of GROUPS) {
-    const [first, second, third] = simulateGroup(group, params, lockedResults);
+    const ranked = simulateGroup(group, params, lockedResults);
+    const [first, second, third] = ranked;
     groupFirsts.push(first.id);
     groupSeconds.push(second.id);
     groupThirds.push({ ...third, group });
+    groupResults[group] = ranked.map((t, i) => ({
+      id: t.id, pts: t.pts, gd: t.gd, finish: i + 1, qualified: i < 2,
+    }));
   }
 
   const best8Thirds = bestThirdPlace(groupThirds);
+  const best8ThirdSet = new Set(best8Thirds);
+
+  // Mark qualifying 3rd-place teams
+  for (const group of GROUPS) {
+    const third = groupResults[group].find(t => t.finish === 3);
+    if (third && best8ThirdSet.has(third.id)) third.qualified = true;
+  }
 
   // Round of 32 bracket: 32 teams (12 winners + 12 runners-up + 8 best thirds)
   // Results in exactly 16 matches. Pairing avoids same-group clashes in R32.
@@ -164,7 +176,7 @@ function simulateOnce(params, lockedResults = {}) {
   stages.sf    = advancers(stages.qf);    // 4  → 2  (finalists)
   stages.final = advancers(stages.sf)[0]; // 2  → 1  (winner)
 
-  return stages;
+  return { stages, groupResults };
 }
 
 // ── Monte Carlo aggregation ──────────────────────────────────────────────────
@@ -172,35 +184,59 @@ function simulateOnce(params, lockedResults = {}) {
 export function runMonteCarlo(n, params, lockedResults = {}) {
   const teamIds = TEAMS.map(t => t.id);
 
-  // Accumulate advancement counts per stage
-  // Each counter = "reached this stage" (i.e. won the previous round)
   const counts = Object.fromEntries(teamIds.map(id => [id, {
     r16: 0, qf: 0, sf: 0, final: 0, winner: 0,
   }]));
 
-  for (let sim = 0; sim < n; sim++) {
-    const stages = simulateOnce(params, lockedResults);
+  // Per-group accumulators: ptsSum, gdSum, finish position counts, qualified count
+  const groupAcc = Object.fromEntries(GROUPS.map(g => [
+    g,
+    Object.fromEntries(GROUP_TEAMS[g].map(id => [id, { pts: 0, gd: 0, f1: 0, f2: 0, f3: 0, f4: 0, qual: 0 }])),
+  ]));
 
-    for (const id of stages.r32) counts[id].r16++;    // won R32 → reached R16
-    for (const id of stages.r16) counts[id].qf++;     // won R16 → reached QF
-    for (const id of stages.qf)  counts[id].sf++;     // won QF  → reached SF (4 teams)
-    for (const id of stages.sf)  counts[id].final++;  // won SF  → reached Final (2 teams)
-    counts[stages.final].winner++;                     // won Final → champion
+  for (let sim = 0; sim < n; sim++) {
+    const { stages, groupResults } = simulateOnce(params, lockedResults);
+
+    for (const id of stages.r32) counts[id].r16++;
+    for (const id of stages.r16) counts[id].qf++;
+    for (const id of stages.qf)  counts[id].sf++;
+    for (const id of stages.sf)  counts[id].final++;
+    counts[stages.final].winner++;
+
+    for (const [g, teams] of Object.entries(groupResults)) {
+      for (const t of teams) {
+        const a = groupAcc[g][t.id];
+        a.pts += t.pts;
+        a.gd  += t.gd;
+        a[`f${t.finish}`]++;
+        if (t.qualified) a.qual++;
+      }
+    }
   }
 
-  // Convert to probabilities
   const probs = Object.fromEntries(teamIds.map(id => [id, {
-    r16:    round4(counts[id].r16    / n),  // P(reached R16)
-    qf:     round4(counts[id].qf     / n),  // P(reached QF)
-    sf:     round4(counts[id].sf     / n),  // P(reached SF)
-    final:  round4(counts[id].final  / n),  // P(reached Final)
-    winner: round4(counts[id].winner / n),  // P(won tournament)
+    r16:    round4(counts[id].r16    / n),
+    qf:     round4(counts[id].qf     / n),
+    sf:     round4(counts[id].sf     / n),
+    final:  round4(counts[id].final  / n),
+    winner: round4(counts[id].winner / n),
   }]));
 
-  // Sanity check: winner probs should sum to ~1
-  const winnerSum = Object.values(probs).reduce((s, p) => s + p.winner, 0);
+  const groups = Object.fromEntries(GROUPS.map(g => [
+    g,
+    Object.fromEntries(Object.entries(groupAcc[g]).map(([id, a]) => [id, {
+      avgPts: round4(a.pts / n),
+      avgGd:  round4(a.gd  / n),
+      p1st:   round4(a.f1  / n),
+      p2nd:   round4(a.f2  / n),
+      p3rd:   round4(a.f3  / n),
+      p4th:   round4(a.f4  / n),
+      pQual:  round4(a.qual / n),
+    }])),
+  ]));
 
-  return { probs, meta: { n, winnerProbSum: round4(winnerSum) } };
+  const winnerSum = Object.values(probs).reduce((s, p) => s + p.winner, 0);
+  return { probs, groups, meta: { n, winnerProbSum: round4(winnerSum) } };
 }
 
 // ── Single match prediction (exported for API use) ──────────────────────────
