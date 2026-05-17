@@ -3,7 +3,7 @@
 
 import { TEAMS } from './teams.js';
 import { GROUP_FIXTURES, KNOCKOUT_SLOTS, getAllFixtures } from './fixtures.js';
-import { fetchMatches } from './fetchMatches.js';
+import { fetchMatches, fetchAllMatches } from './fetchMatches.js';
 import { computeEloRatings } from './computeElo.js';
 import { computeAllForm } from './computeForm.js';
 import { getSquadStats, normaliseMarketValues } from './fetchSquadStats.js';
@@ -15,6 +15,7 @@ export {
   KNOCKOUT_SLOTS,
   getAllFixtures,
   fetchMatches,
+  fetchAllMatches,
   computeEloRatings,
   computeAllForm,
   getSquadStats,
@@ -31,6 +32,7 @@ export async function loadAll() {
 
 export async function refreshAll() {
   invalidate('historical_matches');
+  invalidate('historical_matches_all');
   invalidate('elo_ratings');
   invalidate('team_form');
   invalidate('squad_stats');
