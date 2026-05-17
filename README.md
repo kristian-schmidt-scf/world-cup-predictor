@@ -13,6 +13,7 @@ An interactive web tool for predicting FIFA World Cup 2026 outcomes using hierar
 - **Scenario simulator** — Force any group result and instantly see how knockout probabilities shift
 - **Result locking** — Lock real match scores; they persist across page reloads and automatically seed the simulation
 - **Match countdown timers** — Live status badges count down to kick-off, pulse during live windows, and show final scores
+- **Bilingual UI (EN/DE)** — Language toggle button in the header; all labels, table headers, round names, and team names switch between English and German; preference persists across sessions
 
 ## How It Works
 
@@ -66,6 +67,7 @@ world-cup-predictor/
     ├── index.html
     ├── app.js
     ├── charts.js
+    ├── i18n.js             # EN/DE string table, t(), getLang(), setLang(), teamName()
     └── styles.css
 ```
 

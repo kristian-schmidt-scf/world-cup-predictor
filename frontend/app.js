@@ -1,9 +1,12 @@
 import { createAttackDefenseChart, createScoreHistogram } from './charts.js';
+import { t, getLang, setLang, teamName } from './i18n.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const API = '/api';
-const STAGE_LABELS = [
-  ['r16', 'R16'], ['qf', 'QF'], ['sf', 'SF'], ['final', 'Final'], ['winner', 'Winner'],
+// Translated at render time so language switches are reflected immediately
+const STAGE_LABELS = () => [
+  ['r16', t('roundR16')], ['qf', t('roundQF')], ['sf', t('roundSF')],
+  ['final', t('roundFinal')], ['winner', t('roundWinner')],
 ];
 
 const FLAGS = {
@@ -89,24 +92,25 @@ async function fetchMatchPrediction(a, b) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+const getTeamName = id => teamName(id) ?? state.teamById[id]?.name ?? id;
 const fmtPct  = v  => v != null ? (v * 100).toFixed(1) + '%' : '—';
 const pClass  = v  => v == null ? '' : v >= 0.10 ? 'p-high' : v >= 0.03 ? 'p-med' : 'p-low';
-const fmtDate = ds => ds ? new Date(ds).toLocaleDateString('en-GB', { month:'short', day:'numeric' }) : '—';
+const fmtDate = ds => ds ? new Date(ds).toLocaleDateString(t('dateLocale'), { month:'short', day:'numeric' }) : '—';
 const teamProbs = id => state.simResults?.probs?.[id] ?? null;
 
 // Returns the status badge HTML for a fixture based on time and locked state.
 function countdownBadge(f) {
   const locked = state.lockedResults[matchKey(f)];
-  if (locked) return `<span class="badge badge-done">FT ${locked.goalsA}–${locked.goalsB}</span>`;
+  if (locked) return `<span class="badge badge-done">${t('badgeFTScore', locked.goalsA, locked.goalsB)}</span>`;
 
-  if (!f.kickoff) return `<span class="badge badge-upcoming">Upcoming</span>`;
+  if (!f.kickoff) return `<span class="badge badge-upcoming">${t('badgeUpcoming')}</span>`;
 
   const now = Date.now();
   const ko  = new Date(f.kickoff).getTime();
   const end = ko + 110 * 60 * 1000; // 90 min + 20 min buffer for stoppages
 
   if (now >= ko && now < end) {
-    return `<span class="badge badge-live">LIVE</span>`;
+    return `<span class="badge badge-live">${t('badgeLive')}</span>`;
   }
   if (now >= end) {
     return `<span class="badge badge-done">FT</span>`;
@@ -122,10 +126,10 @@ function countdownBadge(f) {
               : hours > 0 ? `${hours}h ${mins}m`
               : `${mins}m`;
 
-  const kickoffLocal = new Date(f.kickoff).toLocaleString('en-GB', {
+  const kickoffLocal = new Date(f.kickoff).toLocaleString(t('dateLocale'), {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
-  return `<span class="badge badge-upcoming" title="Kick-off: ${kickoffLocal}">${label}</span>`;
+  return `<span class="badge badge-upcoming" title="${t('kickoffLabel', kickoffLocal)}">${label}</span>`;
 }
 
 function setSimStatus(msg) {
@@ -149,7 +153,11 @@ function sortedFilteredTeams() {
   const { col, dir } = state.sort;
   const q = state.filter.toLowerCase();
   const teams = q
-    ? state.teams.filter(t => t.name.toLowerCase().includes(q) || t.id.toLowerCase().includes(q))
+    ? state.teams.filter(tm => {
+        const enName = tm.name.toLowerCase();
+        const deName = teamName(tm.id)?.toLowerCase() ?? '';
+        return enName.includes(q) || deName.includes(q) || tm.id.toLowerCase().includes(q);
+      })
     : [...state.teams];
 
   return teams.sort((a, b) => {
@@ -164,18 +172,18 @@ function renderTeamsTable() {
   const tbody = document.getElementById('teams-tbody');
   const teams = sortedFilteredTeams();
 
-  tbody.innerHTML = teams.map(t => {
-    const pr  = teamProbs(t.id);
-    const sel = t.id === state.selectedTeamId;
+  tbody.innerHTML = teams.map(tm => {
+    const pr  = teamProbs(tm.id);
+    const sel = tm.id === state.selectedTeamId;
     return `
-      <tr class="clickable${sel ? ' row-selected' : ''}" data-team="${t.id}">
-        <td><span class="badge badge-group">${t.group}</span></td>
-        <td>${flag(t.id)}<strong>${t.id}</strong> <span style="color:var(--muted);font-size:12px">${t.name}</span></td>
-        <td>${t.elo ?? '—'}</td>
-        <td>${t.attack  != null ? t.attack.toFixed(3)  : '—'}</td>
-        <td>${t.defense != null ? t.defense.toFixed(3) : '—'}</td>
-        <td>${t.formScore != null ? t.formScore : '—'}</td>
-        <td>${t.marketValueM != null ? '€' + t.marketValueM + 'M' : '—'}</td>
+      <tr class="clickable${sel ? ' row-selected' : ''}" data-team="${tm.id}">
+        <td><span class="badge badge-group">${tm.group}</span></td>
+        <td>${flag(tm.id)}<strong>${tm.id}</strong> <span style="color:var(--muted);font-size:12px">${getTeamName(tm.id)}</span></td>
+        <td>${tm.elo ?? '—'}</td>
+        <td>${tm.attack  != null ? tm.attack.toFixed(3)  : '—'}</td>
+        <td>${tm.defense != null ? tm.defense.toFixed(3) : '—'}</td>
+        <td>${tm.formScore != null ? tm.formScore : '—'}</td>
+        <td>${tm.marketValueM != null ? '€' + tm.marketValueM + 'M' : '—'}</td>
         <td class="${pClass(pr?.winner)}">${pr ? fmtPct(pr.winner) : (state.simResults ? '—' : '...')}</td>
       </tr>`;
   }).join('');
@@ -193,16 +201,16 @@ function renderTeamsTable() {
 function renderTeamDetail() {
   const panel = document.getElementById('team-detail');
   if (!state.selectedTeamId) {
-    panel.innerHTML = '<div class="empty-state"><p>Select a team to see details</p></div>';
+    panel.innerHTML = `<div class="empty-state"><p>${t('selectTeam')}</p></div>`;
     return;
   }
-  const t  = state.teamById[state.selectedTeamId];
-  if (!t) return;
-  const pr = teamProbs(t.id);
-  const groupTeams = state.teams.filter(g => g.group === t.group);
+  const tm = state.teamById[state.selectedTeamId];
+  if (!tm) return;
+  const pr = teamProbs(tm.id);
+  const groupTeams = state.teams.filter(g => g.group === tm.group);
 
   const stagesHtml = pr
-    ? STAGE_LABELS.map(([key, label]) => {
+    ? STAGE_LABELS().map(([key, label]) => {
         const pv  = pr[key] ?? 0;
         const w   = Math.min(100, Math.round(pv * 100));
         return `
@@ -212,39 +220,41 @@ function renderTeamDetail() {
             <span class="stage-pct">${(pv*100).toFixed(1)}%</span>
           </div>`;
       }).join('')
-    : '<p style="color:var(--muted);font-size:13px">Run a simulation to see probabilities</p>';
+    : `<p style="color:var(--muted);font-size:13px">${t('runSimForProbs')}</p>`;
 
-  const record = t.record ? `${t.record.wins}W ${t.record.draws}D ${t.record.losses}L` : '—';
+  const record = tm.record
+    ? `${tm.record.wins}${t('h2hW')} ${tm.record.draws}${t('h2hD')} ${tm.record.losses}${t('h2hL')}`
+    : '—';
 
   panel.innerHTML = `
-    <div class="team-name">${flag(t.id)}${t.name}</div>
-    <div class="team-meta">Group ${t.group} &middot; ${t.confederation} &middot; FIFA #${t.fifaRank}</div>
+    <div class="team-name">${flag(tm.id)}${getTeamName(tm.id)}</div>
+    <div class="team-meta">${t('teamMeta', tm.group, tm.confederation, tm.fifaRank)}</div>
 
     <div class="team-stats">
       <div class="stat-box">
-        <div class="stat-label">Elo</div>
-        <div class="stat-value">${t.elo ?? '—'}</div>
+        <div class="stat-label">${t('statElo')}</div>
+        <div class="stat-value">${tm.elo ?? '—'}</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Last 5</div>
-        <div class="stat-value" style="font-family:monospace">${t.last5 ?? '—'}</div>
+        <div class="stat-label">${t('statLast5')}</div>
+        <div class="stat-value" style="font-family:monospace">${tm.last5 ?? '—'}</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Record (10 games)</div>
+        <div class="stat-label">${t('statRecord')}</div>
         <div class="stat-value" style="font-size:13px">${record}</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Market Value</div>
-        <div class="stat-value" style="font-size:13px">${t.marketValueM ? '€' + t.marketValueM + 'M' : '—'}</div>
+        <div class="stat-label">${t('statMarket')}</div>
+        <div class="stat-value" style="font-size:13px">${tm.marketValueM ? '€' + tm.marketValueM + 'M' : '—'}</div>
       </div>
     </div>
 
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">
-      Group ${t.group} — Attack &amp; Defense
+      ${t('groupAttackDefense', tm.group)}
     </div>
     <div class="chart-container"><canvas id="atk-chart"></canvas></div>
 
-    <div class="path-title" style="margin-top:16px">Path to Final</div>
+    <div class="path-title" style="margin-top:16px">${t('pathToFinal')}</div>
     ${stagesHtml}`;
 
   createAttackDefenseChart('atk-chart', groupTeams);
@@ -285,13 +295,13 @@ async function renderMatchesGroup(group) {
   const container = document.getElementById('matches-content');
 
   container.innerHTML = `
-    <p class="fixture-section-title">Group ${group} — 6 matches</p>
+    <p class="fixture-section-title">${t('groupMatches', group, fixtures.length)}</p>
     <div class="table-wrap">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Date</th><th>Home</th><th></th><th>Away</th>
-            <th>xG</th><th>W&nbsp;/&nbsp;D&nbsp;/&nbsp;L</th><th>Status</th>
+            <th>${t('thDate')}</th><th>${t('thHome')}</th><th></th><th>${t('thAway')}</th>
+            <th>${t('thXg')}</th><th>${t('thWDL')}</th><th>${t('thStatus')}</th>
           </tr>
         </thead>
         <tbody>${fixtures.map(fixtureRowHtml).join('')}</tbody>
@@ -316,7 +326,7 @@ function renderGroupStandings(group) {
 
   const gs = state.simGroups?.[group];
   if (!gs) {
-    container.innerHTML = `<p class="gs-no-sim">Run a simulation to see projected group standings</p>`;
+    container.innerHTML = `<p class="gs-no-sim">${t('gsNoSim')}</p>`;
     return;
   }
 
@@ -344,7 +354,7 @@ function renderGroupStandings(group) {
   };
 
   const rows = teams.map((t, i) => {
-    const name = state.teamById[t.id]?.name ?? t.id;
+    const name = getTeamName(t.id);
     const gd   = t.avgGd >= 0 ? `+${t.avgGd.toFixed(1)}` : t.avgGd.toFixed(1);
     return `<tr>
       <td class="gs-pos">${i + 1}</td>
@@ -361,21 +371,21 @@ function renderGroupStandings(group) {
   container.innerHTML = `
     <div class="gs-section">
       <div class="gs-header">
-        Simulated Standings
-        <span class="gs-sub">${state.simMeta.n.toLocaleString()} simulations</span>
+        ${t('simulatedStandings')}
+        <span class="gs-sub">${t('gsSimCount', state.simMeta.n)}</span>
       </div>
       <div class="table-wrap">
         <table class="data-table gs-table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Team</th>
-              <th title="Average points after 3 matches">Avg Pts</th>
-              <th title="Average goal difference">Avg GD</th>
-              <th title="Probability of finishing 1st">1st</th>
-              <th title="Probability of finishing 2nd">2nd</th>
-              <th title="Probability of finishing 4th (eliminated)">Out</th>
-              <th title="Probability of qualifying (1st, 2nd, or best 3rd)">Qualify</th>
+              <th>${t('thPos')}</th>
+              <th>${t('thGsTeam')}</th>
+              <th title="${t('thAvgPtsTitle')}">${t('thAvgPts')}</th>
+              <th title="${t('thAvgGDTitle')}">${t('thAvgGD')}</th>
+              <th title="${t('thP1stTitle')}">${t('thP1st')}</th>
+              <th title="${t('thP2ndTitle')}">${t('thP2nd')}</th>
+              <th title="${t('thOutTitle')}">${t('thOut')}</th>
+              <th title="${t('thQualifyTitle')}">${t('thQualify')}</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -389,28 +399,28 @@ function matchKey(f) { return `${f.group}-${f.home}-${f.away}`; }
 function lockSectionHtml(f) {
   const key    = matchKey(f);
   const locked = state.lockedResults[key];
-  const hn     = state.teamById[f.home]?.name ?? f.home;
-  const an     = state.teamById[f.away]?.name ?? f.away;
+  const hn     = getTeamName(f.home);
+  const an     = getTeamName(f.away);
 
   if (locked) {
     return `
       <div class="lock-section lock-section--locked">
-        <span class="lock-label">Result locked</span>
+        <span class="lock-label">${t('resultLocked')}</span>
         <span class="lock-score">${flag(f.home)} ${hn} <strong>${locked.goalsA} – ${locked.goalsB}</strong> ${an} ${flag(f.away)}</span>
-        <button class="lock-btn lock-btn--unlock" data-key="${key}">Unlock</button>
+        <button class="lock-btn lock-btn--unlock" data-key="${key}">${t('unlockBtn')}</button>
       </div>`;
   }
 
   return `
     <div class="lock-section">
-      <span class="lock-label">Lock result</span>
+      <span class="lock-label">${t('lockResult')}</span>
       <div class="lock-inputs">
         ${flag(f.home)} <span class="lock-team">${f.home}</span>
         <input class="lock-score-input" id="goals-a-${f.id}" type="number" min="0" max="20" value="0">
         <span class="lock-sep">–</span>
         <input class="lock-score-input" id="goals-b-${f.id}" type="number" min="0" max="20" value="0">
         <span class="lock-team">${f.away}</span> ${flag(f.away)}
-        <button class="lock-btn lock-btn--lock" data-key="${key}" data-fid="${f.id}">Lock</button>
+        <button class="lock-btn lock-btn--lock" data-key="${key}" data-fid="${f.id}">${t('lockBtn')}</button>
       </div>
     </div>`;
 }
@@ -432,11 +442,11 @@ function fixtureRowHtml(f) {
         <div class="match-detail-inner">
           <div>
             <div id="lock-${f.id}">${lockSectionHtml(f)}</div>
-            <div id="meta-${f.id}" style="color:var(--muted);font-size:13px;margin-top:12px">Loading...</div>
+            <div id="meta-${f.id}" style="color:var(--muted);font-size:13px;margin-top:12px">${t('loading')}</div>
           </div>
           <div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-              Score probabilities — top 10 most likely scorelines
+              ${t('scoreProbTitle')}
             </div>
             <div class="score-chart-wrap"><canvas id="hist-${f.id}"></canvas></div>
           </div>
@@ -489,20 +499,20 @@ function renderMatchDetailPanel(f, pred) {
   const metaEl = document.getElementById(`meta-${f.id}`);
   if (!metaEl) return;
 
-  const tn = id => state.teamById[id]?.name ?? id;
+  const tn = id => getTeamName(id);
   const [w, d, l] = [pred.pWin, pred.pDraw, pred.pLoss];
 
   const h2hHtml = buildH2HHtml(f, pred);
 
   metaEl.innerHTML = `
     <div style="font-weight:700;color:var(--text);margin-bottom:10px">${flag(f.home)} ${tn(f.home)} vs ${flag(f.away)} ${tn(f.away)}</div>
-    <div class="match-meta-label">Expected goals</div>
+    <div class="match-meta-label">${t('expectedGoals')}</div>
     <div class="match-meta-val">${pred.xgA.toFixed(2)} – ${pred.xgB.toFixed(2)}</div>
-    <div class="match-meta-label">${f.home} win</div>
+    <div class="match-meta-label">${t('win', f.home)}</div>
     <div class="match-meta-val" style="color:var(--win)">${(w*100).toFixed(1)}%</div>
-    <div class="match-meta-label">Draw</div>
+    <div class="match-meta-label">${t('draw')}</div>
     <div class="match-meta-val" style="color:var(--draw)">${(d*100).toFixed(1)}%</div>
-    <div class="match-meta-label">${f.away} win</div>
+    <div class="match-meta-label">${t('win', f.away)}</div>
     <div class="match-meta-val" style="color:var(--loss)">${(l*100).toFixed(1)}%</div>
     <div class="prob-bar">
       <div class="prob-win"  style="width:${(w*100).toFixed(0)}%"></div>
@@ -524,17 +534,18 @@ function buildH2HHtml(f, pred) {
   if (h2h.played === 0) {
     return `
     <div class="h2h-section">
-      <div class="h2h-title">Head-to-Head</div>
-      <div class="h2h-none">No previous meetings</div>
+      <div class="h2h-title">${t('headToHead')}</div>
+      <div class="h2h-none">${t('noMeetings')}</div>
     </div>`;
   }
 
   const last5Rows = h2h.last5.map(m => {
     const resultClass = m.result === 'W' ? 'h2h-r-win' : m.result === 'D' ? 'h2h-r-draw' : 'h2h-r-loss';
+    const resultLabel = m.result === 'W' ? t('resultW') : m.result === 'D' ? t('resultD') : t('resultL');
     return `<div class="h2h-match">
       <span class="h2h-date">${m.date.slice(0, 7)}</span>
       <span class="h2h-teams">${flag(m.home)}${m.home} ${m.homeGoals}–${m.awayGoals} ${flag(m.away)}${m.away}</span>
-      <span class="h2h-result ${resultClass}">${m.result}</span>
+      <span class="h2h-result ${resultClass}">${resultLabel}</span>
     </div>`;
   }).join('');
 
@@ -543,24 +554,23 @@ function buildH2HHtml(f, pred) {
     const h2hWinRate = h2h.wins / h2h.played;
     const diff = pred.pWin - h2hWinRate;
     if (Math.abs(diff) > 0.15) {
-      const dir = diff > 0 ? 'stronger' : 'weaker';
-      divergence = `<div class="h2h-divergence">Model rates ${f.home} ${dir} than H2H suggests</div>`;
+      divergence = `<div class="h2h-divergence">${diff > 0 ? t('h2hStronger', f.home) : t('h2hWeaker', f.home)}</div>`;
     }
   }
 
   return `
   <div class="h2h-section">
-    <div class="h2h-title">Head-to-Head</div>
+    <div class="h2h-title">${t('headToHead')}</div>
     <div class="h2h-record">
-      <span class="h2h-stat h2h-w">${h2h.wins}W</span>
+      <span class="h2h-stat h2h-w">${h2h.wins}${t('h2hW')}</span>
       <span class="h2h-sep">–</span>
-      <span class="h2h-stat h2h-d">${h2h.draws}D</span>
+      <span class="h2h-stat h2h-d">${h2h.draws}${t('h2hD')}</span>
       <span class="h2h-sep">–</span>
-      <span class="h2h-stat h2h-l">${h2h.losses}L</span>
-      <span class="h2h-played">${h2h.played} played · ${h2h.goalsFor}–${h2h.goalsAgainst} goals</span>
+      <span class="h2h-stat h2h-l">${h2h.losses}${t('h2hL')}</span>
+      <span class="h2h-played">${t('h2hPlayedGoals', h2h.played, h2h.goalsFor, h2h.goalsAgainst)}</span>
     </div>
     ${divergence}
-    <div class="h2h-last5-title">Last ${h2h.last5.length} meeting${h2h.last5.length !== 1 ? 's' : ''}</div>
+    <div class="h2h-last5-title">${t('h2hLastN', h2h.last5.length)}</div>
     ${last5Rows}
   </div>`;
 }
@@ -569,19 +579,19 @@ function buildH2HHtml(f, pred) {
 async function afterResultChange(results) {
   state.lockedResults = results;
   await renderMatchesGroup(state.matchGroup);
-  setSimStatus('Updating simulation...');
+  setSimStatus(t('statusUpdating'));
   try {
     const data = await simulate(10_000);
     state.simResults = data;
     state.simGroups  = data.groups ?? null;
     state.simMeta    = data.meta;
-    setSimStatus(`${data.meta.n.toLocaleString()} sims · ${data.meta.elapsedMs}ms`);
+    setSimStatus(t('statusSims', data.meta.n, data.meta.elapsedMs));
     renderTeamsTable();
     if (state.selectedTeamId) renderTeamDetail();
     renderGroupStandings(state.matchGroup);
     if (document.getElementById('tab-bracket').classList.contains('active')) renderBracket();
   } catch {
-    setSimStatus('Simulation failed');
+    setSimStatus(t('statusFailed'));
   }
 }
 
@@ -631,7 +641,7 @@ document.addEventListener('click', async e => {
       await afterResultChange(results);
     } catch (err) {
       lockBtn.disabled = false;
-      lockBtn.textContent = 'Lock';
+      lockBtn.textContent = t('lockBtn');
       alert(`Failed to lock result: ${err.message}`);
     }
   }
@@ -760,7 +770,7 @@ function buildSlotSvg(x, y, teamId, probs, probKey, isChamp = false) {
 
   if (!teamId) {
     return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#1e293b" stroke="#334155"/>
-            <text x="${x+w/2}" y="${y+h/2+4}" text-anchor="middle" font-family="system-ui" font-size="11" fill="#475569">TBD</text>`;
+            <text x="${x+w/2}" y="${y+h/2+4}" text-anchor="middle" font-family="system-ui" font-size="11" fill="#475569">${t('bktTbd')}</text>`;
   }
 
   const bg  = bktSlotBg(prob, isChamp);
@@ -786,7 +796,7 @@ function buildSlotSvg(x, y, teamId, probs, probKey, isChamp = false) {
 function renderBracketTree() {
   const container = document.getElementById('bracket-tree');
   if (!state.simResults) {
-    container.innerHTML = '<div class="empty-state"><p>Run a simulation to see the visual bracket</p></div>';
+    container.innerHTML = `<div class="empty-state"><p>${t('noSimTree')}</p></div>`;
     return;
   }
 
@@ -795,11 +805,11 @@ function renderBracketTree() {
   const { slotW, slotH, slotGap, colGap, hdrH, blockH, colW, svgH, svgW } = BKT;
 
   const rounds = [
-    { label: 'R32',   probKey: 'r16',    matches: bracket.r32   },
-    { label: 'R16',   probKey: 'qf',     matches: bracket.r16   },
-    { label: 'QF',    probKey: 'sf',     matches: bracket.qf    },
-    { label: 'SF',    probKey: 'final',  matches: bracket.sf    },
-    { label: 'Final', probKey: 'winner', matches: bracket.final },
+    { label: t('roundR32'),   probKey: 'r16',    matches: bracket.r32   },
+    { label: t('roundR16'),   probKey: 'qf',     matches: bracket.r16   },
+    { label: t('roundQF'),    probKey: 'sf',     matches: bracket.qf    },
+    { label: t('roundSF'),    probKey: 'final',  matches: bracket.sf    },
+    { label: t('roundFinal'), probKey: 'winner', matches: bracket.final },
   ];
 
   const p = [];
@@ -808,7 +818,7 @@ function renderBracketTree() {
   rounds.forEach((rd, r) => {
     p.push(`<text x="${r*colW+slotW/2}" y="${hdrH-5}" text-anchor="middle" font-family="system-ui" font-size="10" font-weight="600" fill="#94a3b8" letter-spacing="0.06em">${rd.label}</text>`);
   });
-  p.push(`<text x="${5*colW+slotW/2}" y="${hdrH-5}" text-anchor="middle" font-family="system-ui" font-size="10" font-weight="600" fill="#d4af37" letter-spacing="0.06em">WINNER</text>`);
+  p.push(`<text x="${5*colW+slotW/2}" y="${hdrH-5}" text-anchor="middle" font-family="system-ui" font-size="10" font-weight="600" fill="#d4af37" letter-spacing="0.06em">${t('bktWinner')}</text>`);
 
   // Slots and connectors per round
   rounds.forEach((rd, r) => {
@@ -871,7 +881,10 @@ function setupBracketTooltip() {
   if (!svg || !tip) return;
 
   const probs  = state.simResults.probs;
-  const LABELS = { r16: 'R16', qf: 'QF', sf: 'SF', final: 'Final', winner: 'Winner' };
+  const ROUND_LABELS = {
+    r16: t('roundR16'), qf: t('roundQF'), sf: t('roundSF'),
+    final: t('roundFinal'), winner: t('roundWinner'),
+  };
 
   svg.addEventListener('mousemove', e => {
     const slot = e.target.closest('.bkt-slot');
@@ -879,20 +892,20 @@ function setupBracketTooltip() {
 
     const teamId  = slot.dataset.team;
     const probKey = slot.dataset.probKey;
-    const label   = LABELS[probKey] ?? probKey;
+    const label   = ROUND_LABELS[probKey] ?? probKey;
 
     const top5 = [...state.teams]
-      .filter(t => (probs[t.id]?.[probKey] ?? 0) > 0)
+      .filter(tm => (probs[tm.id]?.[probKey] ?? 0) > 0)
       .sort((a, b) => (probs[b.id]?.[probKey] ?? 0) - (probs[a.id]?.[probKey] ?? 0))
       .slice(0, 5);
 
     tip.innerHTML = `
-      <div class="bkt-tip-title">Top 5 — Reach ${label}</div>
-      ${top5.map((t, i) => {
-        const p = ((probs[t.id]?.[probKey] ?? 0) * 100).toFixed(1);
-        return `<div class="bkt-tip-row${t.id === teamId ? ' bkt-tip-current' : ''}">
+      <div class="bkt-tip-title">${t('bktTooltipTitle', label)}</div>
+      ${top5.map((tm, i) => {
+        const p = ((probs[tm.id]?.[probKey] ?? 0) * 100).toFixed(1);
+        return `<div class="bkt-tip-row${tm.id === teamId ? ' bkt-tip-current' : ''}">
           <span class="bkt-tip-rank">${i + 1}</span>
-          ${flag(t.id)}<span class="bkt-tip-team">${t.id}</span>
+          ${flag(tm.id)}<span class="bkt-tip-team">${tm.id}</span>
           <span class="bkt-tip-prob">${p}%</span>
         </div>`;
       }).join('')}`;
@@ -918,27 +931,27 @@ function renderBracket() {
     info.textContent = '';
     // Show empty states in both views
     const tbody = document.getElementById('bracket-tbody');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Run a simulation to see tournament odds</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">${t('noSimBracket')}</td></tr>`;
     const tree = document.getElementById('bracket-tree');
-    if (tree) tree.innerHTML = '<div class="empty-state"><p>Run a simulation to see the visual bracket</p></div>';
+    if (tree) tree.innerHTML = `<div class="empty-state"><p>${t('noSimTree')}</p></div>`;
     return;
   }
 
-  info.textContent = `${state.simMeta.n.toLocaleString()} simulations · ${state.simMeta.elapsedMs}ms`;
+  info.textContent = t('bracketSimInfo', state.simMeta.n, state.simMeta.elapsedMs);
 
   // Top-5 champion cards (always shown)
   const top5  = [...state.teams]
     .sort((a, b) => (teamProbs(b.id)?.winner ?? 0) - (teamProbs(a.id)?.winner ?? 0))
     .slice(0, 5);
-  const ranks = ['1st', '2nd', '3rd', '4th', '5th'];
-  cards.innerHTML = top5.map((t, i) => {
-    const pct = ((teamProbs(t.id)?.winner ?? 0) * 100).toFixed(1);
+  const ranks = t('ranks');
+  cards.innerHTML = top5.map((tm, i) => {
+    const pct = ((teamProbs(tm.id)?.winner ?? 0) * 100).toFixed(1);
     return `
       <div class="champion-card">
         <div class="champion-rank">${ranks[i]}</div>
-        <div class="champion-flag">${flag(t.id)}</div>
-        <div class="champion-id">${t.id}</div>
-        <div class="champion-name">${t.name}</div>
+        <div class="champion-flag">${flag(tm.id)}</div>
+        <div class="champion-id">${tm.id}</div>
+        <div class="champion-name">${getTeamName(tm.id)}</div>
         <div class="champion-pct">${pct}%</div>
       </div>`;
   }).join('');
@@ -961,12 +974,12 @@ function renderBracketTable() {
     const bold  = v >= 0.05 ? 'font-weight:700' : '';
     return `<td style="background:rgba(59,130,246,${alpha.toFixed(2)});${bold}">${(v*100).toFixed(1)}%</td>`;
   };
-  tbody.innerHTML = sorted.map(t => {
-    const pr = state.simResults.probs[t.id] ?? {};
+  tbody.innerHTML = sorted.map(tm => {
+    const pr = state.simResults.probs[tm.id] ?? {};
     return `
       <tr>
-        <td><span class="badge badge-group">${t.group}</span></td>
-        <td>${flag(t.id)}<strong>${t.id}</strong> <span style="color:var(--muted);font-size:12px">${t.name}</span></td>
+        <td><span class="badge badge-group">${tm.group}</span></td>
+        <td>${flag(tm.id)}<strong>${tm.id}</strong> <span style="color:var(--muted);font-size:12px">${getTeamName(tm.id)}</span></td>
         ${cell(pr.r16)}${cell(pr.qf)}${cell(pr.sf)}${cell(pr.final)}${cell(pr.winner)}
       </tr>`;
   }).join('');
@@ -976,22 +989,22 @@ function initBracketView() {
   document.getElementById('run-sim-btn').addEventListener('click', async () => {
     const btn = document.getElementById('run-sim-btn');
     btn.disabled = true;
-    btn.textContent = 'Running...';
-    setSimStatus('Running 10,000 simulations...');
+    btn.textContent = t('runningSim');
+    setSimStatus(t('statusRunning'));
     try {
       const data = await simulate(10_000);
       state.simResults = data;
       state.simGroups  = data.groups ?? null;
       state.simMeta    = data.meta;
-      setSimStatus(`${data.meta.n.toLocaleString()} sims · ${data.meta.elapsedMs}ms`);
+      setSimStatus(t('statusSims', data.meta.n, data.meta.elapsedMs));
       renderBracket();
       renderTeamsTable();
       if (state.selectedTeamId) renderTeamDetail();
     } catch (err) {
-      setSimStatus('Simulation failed');
+      setSimStatus(t('statusFailed'));
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Run 10,000 Simulations';
+      btn.textContent = t('runSim');
     }
   });
 
@@ -1027,15 +1040,15 @@ function renderScenarioMatches(group) {
   );
 
   if (!fixtures.length) {
-    container.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 0">All matches in this group have real results locked.</p>';
+    container.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:8px 0">${t('allLocked')}</p>`;
     return;
   }
 
   container.innerHTML = fixtures.map(f => {
     const key    = matchKey(f);
     const locked = state.scenarioLocks[key];
-    const hn     = state.teamById[f.home]?.name ?? f.home;
-    const an     = state.teamById[f.away]?.name ?? f.away;
+    const hn     = getTeamName(f.home);
+    const an     = getTeamName(f.away);
     const isWin  = locked && locked.goalsA > locked.goalsB;
     const isDraw = locked && locked.goalsA === locked.goalsB;
     const isLoss = locked && locked.goalsA < locked.goalsB;
@@ -1047,9 +1060,9 @@ function renderScenarioMatches(group) {
           <span class="md-label">MD${f.matchday}</span>
         </div>
         <div class="result-btns">
-          <button class="result-btn${isWin  ? ' active' : ''}" data-key="${key}" data-outcome="win">${f.home} Win</button>
-          <button class="result-btn${isDraw ? ' active' : ''}" data-key="${key}" data-outcome="draw">Draw</button>
-          <button class="result-btn${isLoss ? ' active' : ''}" data-key="${key}" data-outcome="loss">${f.away} Win</button>
+          <button class="result-btn${isWin  ? ' active' : ''}" data-key="${key}" data-outcome="win">${t('win', f.home)}</button>
+          <button class="result-btn${isDraw ? ' active' : ''}" data-key="${key}" data-outcome="draw">${t('draw')}</button>
+          <button class="result-btn${isLoss ? ' active' : ''}" data-key="${key}" data-outcome="loss">${t('win', f.away)}</button>
           ${locked ? `<button class="result-btn btn-clear" data-key="${key}" data-outcome="clear">×</button>` : ''}
         </div>
       </div>`;
@@ -1073,17 +1086,17 @@ function renderScenarioMatches(group) {
 async function runScenario() {
   const btn = document.getElementById('run-scenario-btn');
   btn.disabled = true;
-  btn.textContent = 'Running...';
+  btn.textContent = t('runningSim');
   try {
     const data = await simulate(10_000, state.scenarioLocks);
     state.scenarioResults = data;
     renderScenarioResults();
   } catch (err) {
     document.getElementById('scenario-results').innerHTML =
-      `<div class="empty-state"><p>Scenario failed: ${err.message}</p></div>`;
+      `<div class="empty-state"><p>${t('scenarioFailed', err.message)}</p></div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Run Scenario';
+    btn.textContent = t('runScenario');
   }
 }
 
@@ -1092,7 +1105,7 @@ function renderScenarioResults() {
   const base = state.simResults?.probs;
   const scen = state.scenarioResults?.probs;
   if (!scen) {
-    container.innerHTML = '<div class="empty-state"><p>Lock a match result and run the scenario.</p></div>';
+    container.innerHTML = `<div class="empty-state"><p>${t('scenarioNoSim')}</p></div>`;
     return;
   }
 
@@ -1113,27 +1126,27 @@ function renderScenarioResults() {
 
   container.innerHTML = `
     <h3>
-      Scenario vs Baseline
-      <span style="font-size:12px;color:var(--muted);margin-left:8px">${n} match${n !== 1 ? 'es' : ''} locked</span>
+      ${t('scenarioVsBaseline')}
+      <span style="font-size:12px;color:var(--muted);margin-left:8px">${t('matchesLocked', n)}</span>
     </h3>
     <div class="table-wrap" style="margin-top:14px">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Team</th>
-            <th>R16 base → scen</th>
-            <th>Final base → scen</th>
-            <th>Winner base → scen</th>
+            <th>${t('thGsTeam')}</th>
+            <th>${t('thR16BaseScen')}</th>
+            <th>${t('thFinalBaseScen')}</th>
+            <th>${t('thWinnerBaseScen')}</th>
           </tr>
         </thead>
         <tbody>
-          ${teams.map(t => {
-            const bp = base?.[t.id] ?? {};
-            const sp = scen?.[t.id]  ?? {};
+          ${teams.map(tm => {
+            const bp = base?.[tm.id] ?? {};
+            const sp = scen?.[tm.id]  ?? {};
             const col = k => `<td>${fmtPct(bp[k])} → <strong>${fmtPct(sp[k])}</strong>${delta(bp[k], sp[k])}</td>`;
             return `
               <tr>
-                <td>${flag(t.id)}<strong>${t.id}</strong> <span style="color:var(--muted);font-size:12px">${t.name}</span></td>
+                <td>${flag(tm.id)}<strong>${tm.id}</strong> <span style="color:var(--muted);font-size:12px">${getTeamName(tm.id)}</span></td>
                 ${col('r16')}${col('final')}${col('winner')}
               </tr>`;
           }).join('')}
@@ -1158,10 +1171,36 @@ function initScenarioView() {
     state.scenarioResults = null;
     renderScenarioMatches(state.scenarioGroup);
     document.getElementById('scenario-results').innerHTML =
-      '<div class="empty-state"><p>Lock a match result and run the scenario.</p></div>';
+      `<div class="empty-state"><p>${t('scenarioNoSim')}</p></div>`;
   });
 
   renderScenarioMatches('A');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// I18N HELPERS
+// ════════════════════════════════════════════════════════════════════════════
+
+function applyStaticTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+}
+
+function rerenderAll() {
+  applyStaticTranslations();
+  renderTeamsTable();
+  if (state.selectedTeamId) renderTeamDetail();
+  state.expandedMatch = null;
+  renderMatchesGroup(state.matchGroup);
+  renderGroupStandings(state.matchGroup);
+  renderScenarioMatches(state.scenarioGroup);
+  if (state.scenarioResults) renderScenarioResults();
+  const bracketTab = document.getElementById('tab-bracket');
+  if (bracketTab?.classList.contains('active') && state.simResults) renderBracket();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1177,10 +1216,11 @@ async function init() {
     ]);
     state.teams         = teamsData.teams;
     state.fixtures      = fixturesData.fixtures;
-    state.teamById      = Object.fromEntries(state.teams.map(t => [t.id, t]));
+    state.teamById      = Object.fromEntries(state.teams.map(tm => [tm.id, tm]));
     state.lockedResults = resultsData;
 
     document.getElementById('loading').classList.add('hidden');
+    applyStaticTranslations();
 
     // Wire up tab navigation
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1193,27 +1233,37 @@ async function init() {
     initScenarioView();
     renderTeamsTable();
 
+    // Wire up language toggle button
+    const langBtn = document.getElementById('lang-btn');
+    langBtn.textContent = getLang() === 'en' ? 'DE' : 'EN';
+    langBtn.addEventListener('click', () => {
+      const newLang = getLang() === 'en' ? 'de' : 'en';
+      setLang(newLang);
+      langBtn.textContent = newLang === 'en' ? 'DE' : 'EN';
+      rerenderAll();
+    });
+
     // Run initial simulation in background
-    setSimStatus('Running initial simulation...');
+    setSimStatus(t('statusInitial'));
     try {
       const data = await simulate(10_000);
       state.simResults = data;
       state.simGroups  = data.groups ?? null;
       state.simMeta    = data.meta;
-      setSimStatus(`${data.meta.n.toLocaleString()} sims · ${data.meta.elapsedMs}ms`);
+      setSimStatus(t('statusSims', data.meta.n, data.meta.elapsedMs));
       renderTeamsTable();
       if (state.selectedTeamId) renderTeamDetail();
       renderGroupStandings(state.matchGroup);
       if (document.getElementById('tab-bracket').classList.contains('active')) renderBracket();
     } catch {
-      setSimStatus('Simulation unavailable');
+      setSimStatus(t('statusUnavailable'));
     }
 
   } catch (err) {
     document.getElementById('loading').innerHTML = `
       <div style="text-align:center">
-        <p style="color:var(--loss);margin-bottom:8px">Failed to load: ${err.message}</p>
-        <p style="color:var(--muted)">Is the server running? Try: <code>npm start</code></p>
+        <p style="color:var(--loss);margin-bottom:8px">${t('serverError', err.message)}</p>
+        <p style="color:var(--muted)">${t('serverHint')}<code>npm start</code></p>
       </div>`;
   }
 }
