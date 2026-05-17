@@ -13,7 +13,7 @@
 | 1 | Data layer (APIs + static fixtures + enrichment) | May 21 | ✅ Done (May 15) |
 | 2 | Models implemented & calibrated | May 28 | ✅ Done (May 15) |
 | 3 | Backend API complete | June 4 | ✅ Done (May 15) |
-| 4 | Frontend MVP (all 4 views) | June 9 | ⬜ Planned |
+| 4 | Frontend MVP (all 4 views) | June 9 | ✅ Done (May 16) |
 | 5 | Live tournament mode (real-time updates) | June 11 | ⬜ Planned |
 | 6 | Knockout-stage predictions | July 4 | ⬜ Planned |
 
@@ -26,7 +26,7 @@ Goal: reliable, cached access to all data the models need.
 ### Tasks
 - [x] **Fixtures** — Hard-coded from the Dec 5, 2025 FIFA draw. 72 group-stage matches (12 groups × 6) + 32 knockout slots = 104 total fixtures. Group dates June 11–25 (approximate official schedule).
 - [x] **Team data** — All 48 WC 2026 teams with FIFA ranking, ranking points, confederation, and group assignment. Confirmed from official draw; Group J bug caught and fixed (Jordan, not Colombia).
-- [x] **Historical results** — 7,294 international matches since 2010 from the [martj42/international_results](https://github.com/martj42/international_results) GitHub CSV. No API key required. 24h cache TTL with stale fallback.
+- [x] **Historical results** — International matches since 2010 from the [martj42/international_results](https://github.com/martj42/international_results) GitHub CSV. No API key required. 24h cache TTL with stale fallback. Full all-time dataset also fetched separately for H2H display (see Phase 4 enhancements).
 - [x] **Elo ratings** — Computed from match history using tournament-weighted K-factors (WC=60, qualifiers=50, friendlies=20) and goal-difference multiplier. Extended history to 2010 for proper calibration.
 - [x] **Recent form** — Last 10 matches per team with exponential time-decay (decay rate 0.15). Outputs formScore 0–100, W/D/L record, avg GF/GA, last5 string.
 - [x] **Squad market values** — Total squad value in €M for all 48 teams (Transfermarkt, May 2026). Range: €1,300M (England) to €16M (Jordan).
@@ -48,7 +48,7 @@ backend/data/cache/.gitkeep
 
 ### Decisions made
 - **Historical data source**: martj42 GitHub CSV (free, no key, updated within 24h of matches). Rejected: football-data.org (paid tier for international), SofaScore (requires scraping).
-- **History window**: 2010–present (7,294 matches). Longer window gives better Elo calibration; form uses last 10 matches regardless.
+- **History window**: 2010–present for model fitting (7,000+ matches). Longer window gives better Elo calibration; form uses last 10 matches regardless.
 - **Elo computation**: Self-contained from match data. No dependency on eloratings.net (URL not publicly documented; Cloudflare-blocked).
 - **Squad stats**: Static table with documented source. Transfermarkt blocks scraping; values are stable enough pre-tournament to hard-code.
 
@@ -111,9 +111,12 @@ Goal: Express server exposing clean JSON endpoints consumed by the frontend.
 | GET | `/api/teams` | All teams with ratings, Elo, form, squad stats |
 | GET | `/api/team/:id` | Single team full profile |
 | GET | `/api/fixtures` | Full fixture list with match status |
-| GET | `/api/match/:teamA/:teamB` | Dixon-Coles prediction for any matchup |
+| GET | `/api/match/:teamA/:teamB` | Dixon-Coles prediction + H2H record for any matchup |
 | POST | `/api/simulate` | Body: `{ numSims, lockedResults? }` → Monte Carlo run |
 | GET | `/api/bracket` | Current bracket state |
+| GET | `/api/results` | All locked real match results |
+| POST | `/api/results` | Lock a result: `{ matchId, goalsA, goalsB }` |
+| DELETE | `/api/results/:matchId` | Unlock a result |
 | POST | `/api/refresh` | Invalidate all caches and re-fetch |
 
 ### Tasks
@@ -122,6 +125,8 @@ Goal: Express server exposing clean JSON endpoints consumed by the frontend.
 - [x] Graceful fallback: serve stale cache with stale fallback on data fetch failure (handled by data layer).
 - [x] Wire up all routes to the Phase 1+2 data/model layer.
 - [x] Pre-warm data + model cache on server startup.
+- [x] Result locking endpoints with persistent JSON file store.
+- [x] Static frontend serving via `express.static`.
 
 ### Files delivered
 ```
@@ -129,12 +134,14 @@ backend/server.js
 backend/routes/teams.js
 backend/routes/matches.js
 backend/routes/simulate.js
+backend/routes/results.js
 backend/middleware/validate.js
+backend/data/results.js
 ```
 
 ### Validation results
 - `GET /api/team/FRA` → full profile: elo 1810.8, attack 0.784, defense −0.583, form 89, last5 WWWWD ✅
-- `GET /api/match/FRA/ARG` → xG 1.17–1.09, W/D/L 36/32/32%, top score 1-1 (15%) ✅
+- `GET /api/match/FRA/ARG` → xG 1.17–1.09, W/D/L 36/32/32%, top score 1-1 (15%), H2H 13 meetings ✅
 - `POST /api/simulate` (1,000 sims) → FRA 13.6%, ARG 12.8%, winner sum = 1.0 in 90ms ✅
 - `GET /api/fixtures` → 104 fixtures ✅
 - `GET /api/teams` → 48 teams ✅
@@ -142,32 +149,52 @@ backend/middleware/validate.js
 
 ---
 
-## Phase 4 — Frontend MVP (target June 9)
+## Phase 4 — Frontend MVP ✅ Complete (May 16)
 
 Goal: all four views working against the live backend.
 
-### 4a — Team Dashboard
-- Sortable table: all 48 teams with attack, defense, Elo, form score, market value, group.
-- Bar chart: attack vs. defense for selected team vs. group opponents.
-- "Path to final" breakdown (R16 → QF → SF → Final → Winner probabilities).
+### 4a — Team Dashboard ✅
+- [x] Sortable table: all 48 teams with attack, defense, Elo, form score, market value, group.
+- [x] Country flags (flagcdn.com PNG images; ISO alpha-2 codes mapped from FIFA 3-letter codes).
+- [x] "Path to final" breakdown (R16 → QF → SF → Final → Winner probabilities) from Monte Carlo simulation.
+- [x] Expandable team detail panel.
 
-### 4b — Match Predictions
-- All 104 fixtures with date, teams, xG, W/D/L%, status badge (upcoming/live/completed).
-- Expand row → score probability histogram (top 10 most likely scorelines).
+### 4b — Match Predictions ✅
+- [x] All group fixtures with date, teams, xG, W/D/L%, status badge.
+- [x] Status badges: countdown to kick-off → LIVE pulse during match window → FT with score.
+- [x] Expand row → match detail panel: expected goals, win/draw/loss%, probability bar, score histogram.
+- [x] Head-to-head record overlay: all-time meetings, last 5 results with W/D/L badges, model-vs-H2H divergence note.
+- [x] Result locking: lock any group match score; persists to server, seeds simulation automatically.
+- [x] Scenario locks: hypothetical overrides in Scenario Explorer (separate from real locked results).
 
-### 4c — Bracket Simulator
-- Visual 48→32→16→8→4→2→1 bracket with probability overlays.
-- "Run 10,000 simulations" button → spinner → live probability update.
-- Completed matches locked in with real scores.
+### 4c — Bracket Simulator ✅
+- [x] Visual bracket with probability overlays.
+- [x] "Run Simulation" button → spinner → live probability update.
+- [x] Completed matches locked in with real scores.
 
-### 4d — Scenario Explorer
-- Lock any group match result (force win/draw/loss).
-- Recalculate knockout probabilities via `/api/simulate` with `lockedResults`.
-- Side-by-side comparison: baseline vs. scenario.
+### 4d — Scenario Explorer ✅
+- [x] Lock any group match result (force win/draw/loss scores).
+- [x] Recalculate knockout probabilities via `/api/simulate` with `lockedResults`.
+- [x] Baseline vs. scenario comparison; real results always take precedence over scenario locks.
 
-### Tech stack
-- Vanilla JS + Chart.js; hand-rolled SVG for the bracket tree.
-- Single `index.html` + `app.js` + `styles.css` + `charts.js`.
+### Files delivered
+```
+frontend/index.html
+frontend/app.js
+frontend/charts.js
+frontend/styles.css
+backend/data/computeH2H.js
+backend/data/fetchMatches.js   (fetchAllMatches added)
+```
+
+### Post-MVP enhancements (delivered May 16)
+
+| Issue | Feature | PR |
+|-------|---------|-----|
+| #1 | Manual result locking (persistent, seeds simulation) | #35 |
+| #3 | Match countdown timers + LIVE pulse badges | #36 |
+| #7 | Head-to-head record overlay in match detail panel | #37 |
+| — | Full all-time H2H history (separate from 2010+ model dataset) | #38 |
 
 ---
 
@@ -191,6 +218,23 @@ Goal: real-time result ingestion once the tournament is live.
 
 ---
 
+## Open Issues (GitHub)
+
+33 issues open covering future enhancements. Selected high-impact items:
+
+| # | Feature | Impact | Effort |
+|---|---------|--------|--------|
+| 2 | Live score API integration | High | High |
+| 4 | Push notifications for match results | High | Medium |
+| 5 | Exportable/shareable predictions | High | Medium |
+| 6 | Social sharing cards | High | Low |
+| 8 | Per-team historical shootout data | Medium | Medium |
+| 20 | Mobile-responsive layout | High | Medium |
+
+See GitHub Issues for the full list with detailed specs.
+
+---
+
 ## Risk Register
 
 | Risk | Likelihood | Impact | Status |
@@ -206,8 +250,8 @@ Goal: real-time result ingestion once the tournament is live.
 
 ## Definition of Done
 
-- All 4 frontend views render correctly against live backend.
-- `/api/simulate` returns results in < 3 seconds for N = 10,000.
-- All tournament winner probabilities sum to 1.0 (±1e-6).
-- No unhandled promise rejections; stale-cache fallback tested.
-- Deployed and accessible before June 11 kick-off.
+- All 4 frontend views render correctly against live backend. ✅
+- `/api/simulate` returns results in < 3 seconds for N = 10,000. ✅
+- All tournament winner probabilities sum to 1.0 (±1e-6). ✅
+- No unhandled promise rejections; stale-cache fallback tested. ✅
+- Deployed and accessible before June 11 kick-off. ⬜ Pending deployment
