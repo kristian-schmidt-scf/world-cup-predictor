@@ -457,7 +457,7 @@ async function prefetchPrediction(f) {
 function updateFixtureInline(f, pred) {
   const xgEl  = document.getElementById(`xg-${f.id}`);
   const wdlEl = document.getElementById(`wdl-${f.id}`);
-  if (xgEl) xgEl.textContent = `${pred.xgA}–${pred.xgB}`;
+  if (xgEl) xgEl.textContent = `${pred.xgA.toFixed(2)}–${pred.xgB.toFixed(2)}`;
   if (wdlEl) {
     const [w, d, l] = [pred.pWin, pred.pDraw, pred.pLoss].map(v => (v*100).toFixed(0) + '%');
     wdlEl.innerHTML = `<span style="color:var(--win)">${w}</span>&nbsp;/&nbsp;<span style="color:var(--draw)">${d}</span>&nbsp;/&nbsp;<span style="color:var(--loss)">${l}</span>`;
@@ -497,7 +497,7 @@ function renderMatchDetailPanel(f, pred) {
   metaEl.innerHTML = `
     <div style="font-weight:700;color:var(--text);margin-bottom:10px">${flag(f.home)} ${tn(f.home)} vs ${flag(f.away)} ${tn(f.away)}</div>
     <div class="match-meta-label">Expected goals</div>
-    <div class="match-meta-val">${pred.xgA} – ${pred.xgB}</div>
+    <div class="match-meta-val">${pred.xgA.toFixed(2)} – ${pred.xgB.toFixed(2)}</div>
     <div class="match-meta-label">${f.home} win</div>
     <div class="match-meta-val" style="color:var(--win)">${(w*100).toFixed(1)}%</div>
     <div class="match-meta-label">Draw</div>
