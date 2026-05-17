@@ -12,12 +12,13 @@
     <div class="header-inner">
       <div class="logo">WC 2026 Predictor</div>
       <nav class="tab-nav">
-        <button class="tab-btn active" data-tab="teams">Teams</button>
-        <button class="tab-btn" data-tab="matches">Matches</button>
-        <button class="tab-btn" data-tab="bracket">Bracket</button>
-        <button class="tab-btn" data-tab="scenario">Scenario</button>
+        <button class="tab-btn active" data-tab="teams"    data-i18n="tabTeams">Teams</button>
+        <button class="tab-btn"        data-tab="matches"  data-i18n="tabMatches">Matches</button>
+        <button class="tab-btn"        data-tab="bracket"  data-i18n="tabBracket">Bracket</button>
+        <button class="tab-btn"        data-tab="scenario" data-i18n="tabScenario">Scenario</button>
       </nav>
       <div class="sim-status" id="sim-status"></div>
+      <button id="lang-btn" class="lang-btn" title="Switch language / Sprache wechseln">DE</button>
     </div>
   </header>
 
@@ -35,21 +36,21 @@
 
         <div class="teams-left">
           <div class="section-header">
-            <h2>All 48 Teams</h2>
-            <input type="text" id="team-search" placeholder="Search team..." class="search-input">
+            <h2 data-i18n="allTeams">All 48 Teams</h2>
+            <input type="text" id="team-search" placeholder="Search team..." class="search-input" data-i18n-placeholder="searchPlaceholder">
           </div>
           <div class="table-wrap">
             <table class="data-table" id="teams-table">
               <thead>
                 <tr>
-                  <th data-sort="group">Grp <span class="sort-icon">↕</span></th>
-                  <th data-sort="name">Team <span class="sort-icon">↕</span></th>
-                  <th data-sort="elo" class="col-active">Elo <span class="sort-icon">↓</span></th>
-                  <th data-sort="attack">Attack <span class="sort-icon">↕</span></th>
-                  <th data-sort="defense">Defense <span class="sort-icon">↕</span></th>
-                  <th data-sort="formScore">Form <span class="sort-icon">↕</span></th>
-                  <th data-sort="marketValueM">Market €M <span class="sort-icon">↕</span></th>
-                  <th data-sort="winner">Win% <span class="sort-icon">↕</span></th>
+                  <th data-sort="group"><span data-i18n="thGrp">Grp</span> <span class="sort-icon">↕</span></th>
+                  <th data-sort="name"><span data-i18n="thTeam">Team</span> <span class="sort-icon">↕</span></th>
+                  <th data-sort="elo" class="col-active"><span data-i18n="thElo">Elo</span> <span class="sort-icon">↓</span></th>
+                  <th data-sort="attack"><span data-i18n="thAttack">Attack</span> <span class="sort-icon">↕</span></th>
+                  <th data-sort="defense"><span data-i18n="thDefense">Defense</span> <span class="sort-icon">↕</span></th>
+                  <th data-sort="formScore"><span data-i18n="thForm">Form</span> <span class="sort-icon">↕</span></th>
+                  <th data-sort="marketValueM"><span data-i18n="thMarket">Market €M</span> <span class="sort-icon">↕</span></th>
+                  <th data-sort="winner"><span data-i18n="thWinPct">Win%</span> <span class="sort-icon">↕</span></th>
                 </tr>
               </thead>
               <tbody id="teams-tbody"></tbody>
@@ -58,7 +59,7 @@
         </div>
 
         <aside class="teams-right" id="team-detail">
-          <div class="empty-state"><p>Select a team to see details</p></div>
+          <div class="empty-state"><p data-i18n="selectTeam">Select a team to see details</p></div>
         </aside>
 
       </div>
@@ -86,11 +87,11 @@
     <!-- ── BRACKET ────────────────────────────────────────────────────────── -->
     <div id="tab-bracket" class="tab-pane">
       <div class="bracket-toolbar">
-        <h2>Tournament Odds</h2>
-        <button class="btn-primary" id="run-sim-btn">Run 10,000 Simulations</button>
+        <h2 data-i18n="tournamentOdds">Tournament Odds</h2>
+        <button class="btn-primary" id="run-sim-btn" data-i18n="runSim">Run 10,000 Simulations</button>
         <div class="view-toggle" id="bracket-view-toggle">
-          <button class="view-toggle-btn active" data-view="tree">Tree</button>
-          <button class="view-toggle-btn" data-view="table">Table</button>
+          <button class="view-toggle-btn active" data-view="tree"  data-i18n="bracketTree">Tree</button>
+          <button class="view-toggle-btn"         data-view="table" data-i18n="bracketTable">Table</button>
         </div>
         <span class="sim-info" id="bracket-sim-info"></span>
       </div>
@@ -107,13 +108,13 @@
           <table class="data-table" id="bracket-table">
             <thead>
               <tr>
-                <th>Grp</th>
-                <th>Team</th>
-                <th>R16</th>
-                <th>QF</th>
-                <th>SF</th>
-                <th>Final</th>
-                <th>Winner</th>
+                <th data-i18n="thGrp">Grp</th>
+                <th data-i18n="thTeam">Team</th>
+                <th data-i18n="roundR16">R16</th>
+                <th data-i18n="roundQF">QF</th>
+                <th data-i18n="roundSF">SF</th>
+                <th data-i18n="roundFinal">Final</th>
+                <th data-i18n="roundWinner">Winner</th>
               </tr>
             </thead>
             <tbody id="bracket-tbody"></tbody>
@@ -127,8 +128,8 @@
       <div class="scenario-layout">
 
         <div class="scenario-controls">
-          <h2>Scenario Explorer</h2>
-          <p class="help-text">Lock group match results to explore how outcomes shift tournament probabilities.</p>
+          <h2 data-i18n="scenarioExplorer">Scenario Explorer</h2>
+          <p class="help-text" data-i18n="scenarioHelp">Lock group match results to explore how outcomes shift tournament probabilities.</p>
           <div class="group-tabs" id="scenario-group-tabs">
             <button class="group-tab active" data-group="A">A</button>
             <button class="group-tab" data-group="B">B</button>
@@ -145,13 +146,13 @@
           </div>
           <div id="scenario-matches"></div>
           <div class="scenario-actions">
-            <button class="btn-primary" id="run-scenario-btn">Run Scenario</button>
-            <button class="btn-secondary" id="clear-scenario-btn">Clear All</button>
+            <button class="btn-primary"   id="run-scenario-btn"   data-i18n="runScenario">Run Scenario</button>
+            <button class="btn-secondary" id="clear-scenario-btn" data-i18n="clearAll">Clear All</button>
           </div>
         </div>
 
         <div class="scenario-results" id="scenario-results">
-          <div class="empty-state"><p>Lock a match result and run the scenario to see the impact.</p></div>
+          <div class="empty-state"><p data-i18n="scenarioNoSim2">Lock a match result and run the scenario to see the impact.</p></div>
         </div>
 
       </div>
