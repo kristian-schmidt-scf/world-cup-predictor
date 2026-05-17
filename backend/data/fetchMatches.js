@@ -9,7 +9,8 @@ import { TEAM_BY_NAME } from './teams.js';
 const RESULTS_URL =
   'https://raw.githubusercontent.com/martj42/international_results/master/results.csv';
 
-const CACHE_KEY = 'historical_matches';
+const CACHE_KEY     = 'historical_matches';
+const CACHE_KEY_ALL = 'historical_matches_all';
 const CACHE_TTL_HOURS = 24;
 // Elo needs longer history for calibration; form only uses last 10 matches anyway
 const CUTOFF_DATE = '2010-01-01';
@@ -58,15 +59,43 @@ function resolveTeamId(name) {
   return aliases[lower] ?? null;
 }
 
+function parseAndMap(rows, dateFilter) {
+  return rows
+    .filter(r => !dateFilter || r.date >= dateFilter)
+    .map(r => {
+      const homeId = resolveTeamId(r.home_team);
+      const awayId = resolveTeamId(r.away_team);
+      return {
+        date:       r.date,
+        home:       homeId,
+        away:       awayId,
+        homeGoals:  parseInt(r.home_score, 10),
+        awayGoals:  parseInt(r.away_score, 10),
+        tournament: r.tournament,
+        neutral:    r.neutral === 'True',
+      };
+    })
+    .filter(m => (m.home || m.away) && !isNaN(m.homeGoals) && !isNaN(m.awayGoals));
+}
+
+async function fetchRaw() {
+  try {
+    const res = await fetch(RESULTS_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } catch (err) {
+    throw err;
+  }
+}
+
+// Returns matches since CUTOFF_DATE — used for model fitting (Elo, form, Bayesian).
 export async function fetchMatches() {
   const cached = get(CACHE_KEY);
   if (cached) return cached;
 
   let raw;
   try {
-    const res = await fetch(RESULTS_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    raw = await res.text();
+    raw = await fetchRaw();
   } catch (err) {
     console.warn(`[fetchMatches] fetch failed (${err.message}), using stale cache`);
     const stale = getStale(CACHE_KEY);
@@ -74,27 +103,29 @@ export async function fetchMatches() {
     throw new Error('No historical match data available and fetch failed.');
   }
 
-  const rows = parseCsv(raw);
-
-  const matches = rows
-    .filter(r => r.date >= CUTOFF_DATE)
-    .map(r => {
-      const homeId = resolveTeamId(r.home_team);
-      const awayId = resolveTeamId(r.away_team);
-      return {
-        date:      r.date,
-        home:      homeId,
-        away:      awayId,
-        homeGoals: parseInt(r.home_score, 10),
-        awayGoals: parseInt(r.away_score, 10),
-        tournament: r.tournament,
-        neutral:   r.neutral === 'True',
-      };
-    })
-    // Keep only matches where at least one side is a WC 2026 team
-    .filter(m => (m.home || m.away) && !isNaN(m.homeGoals) && !isNaN(m.awayGoals));
-
+  const matches = parseAndMap(parseCsv(raw), CUTOFF_DATE);
   set(CACHE_KEY, matches, CACHE_TTL_HOURS);
   console.log(`[fetchMatches] loaded ${matches.length} matches since ${CUTOFF_DATE}`);
+  return matches;
+}
+
+// Returns the full historical dataset (all years) — used for H2H display only.
+export async function fetchAllMatches() {
+  const cached = get(CACHE_KEY_ALL);
+  if (cached) return cached;
+
+  let raw;
+  try {
+    raw = await fetchRaw();
+  } catch (err) {
+    console.warn(`[fetchAllMatches] fetch failed (${err.message}), using stale cache`);
+    const stale = getStale(CACHE_KEY_ALL);
+    if (stale) return stale;
+    throw new Error('No historical match data available and fetch failed.');
+  }
+
+  const matches = parseAndMap(parseCsv(raw), null);
+  set(CACHE_KEY_ALL, matches, CACHE_TTL_HOURS);
+  console.log(`[fetchAllMatches] loaded ${matches.length} matches (full history)`);
   return matches;
 }
