@@ -413,6 +413,8 @@ function renderMatchDetailPanel(f, pred) {
   const tn = id => state.teamById[id]?.name ?? id;
   const [w, d, l] = [pred.pWin, pred.pDraw, pred.pLoss];
 
+  const h2hHtml = buildH2HHtml(f, pred);
+
   metaEl.innerHTML = `
     <div style="font-weight:700;color:var(--text);margin-bottom:10px">${flag(f.home)} ${tn(f.home)} vs ${flag(f.away)} ${tn(f.away)}</div>
     <div class="match-meta-label">Expected goals</div>
@@ -430,9 +432,58 @@ function renderMatchDetailPanel(f, pred) {
     </div>
     <div class="prob-labels">
       <span>${f.home}</span><span>Draw</span><span>${f.away}</span>
-    </div>`;
+    </div>
+    ${h2hHtml}`;
 
   createScoreHistogram(`hist-${f.id}`, pred.topScores);
+}
+
+function buildH2HHtml(f, pred) {
+  const h2h = pred.h2h;
+  if (!h2h) return '';
+
+  if (h2h.played === 0) {
+    return `
+    <div class="h2h-section">
+      <div class="h2h-title">Head-to-Head</div>
+      <div class="h2h-none">No previous meetings</div>
+    </div>`;
+  }
+
+  const last5Rows = h2h.last5.map(m => {
+    const resultClass = m.result === 'W' ? 'h2h-r-win' : m.result === 'D' ? 'h2h-r-draw' : 'h2h-r-loss';
+    return `<div class="h2h-match">
+      <span class="h2h-date">${m.date.slice(0, 7)}</span>
+      <span class="h2h-teams">${flag(m.home)}${m.home} ${m.homeGoals}–${m.awayGoals} ${flag(m.away)}${m.away}</span>
+      <span class="h2h-result ${resultClass}">${m.result}</span>
+    </div>`;
+  }).join('');
+
+  let divergence = '';
+  if (h2h.played >= 5) {
+    const h2hWinRate = h2h.wins / h2h.played;
+    const diff = pred.pWin - h2hWinRate;
+    if (Math.abs(diff) > 0.15) {
+      const dir = diff > 0 ? 'stronger' : 'weaker';
+      divergence = `<div class="h2h-divergence">Model rates ${f.home} ${dir} than H2H suggests</div>`;
+    }
+  }
+
+  return `
+  <div class="h2h-section">
+    <div class="h2h-title">Head-to-Head</div>
+    <div class="h2h-record">
+      <span class="h2h-stat h2h-w">${h2h.wins}W</span>
+      <span class="h2h-sep">–</span>
+      <span class="h2h-stat h2h-d">${h2h.draws}D</span>
+      <span class="h2h-sep">–</span>
+      <span class="h2h-stat h2h-l">${h2h.losses}L</span>
+      <span class="h2h-played">${h2h.played} played · ${h2h.goalsFor}–${h2h.goalsAgainst} goals</span>
+    </div>
+    ${divergence}
+    <div class="h2h-last5-title">Last ${h2h.last5.length} meeting${h2h.last5.length !== 1 ? 's' : ''}</div>
+    ${last5Rows}
+  </div>`;
 }
 
 // Called after any real result is locked or unlocked — re-sims and refreshes all views.

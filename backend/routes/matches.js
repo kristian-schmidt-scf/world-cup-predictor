@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getAllFixtures, loadAll } from '../data/index.js';
 import { estimateParams } from '../models/hierarchicalBayesian.js';
 import { predictMatch } from '../models/dixonColes.js';
+import { computeH2H } from '../data/computeH2H.js';
 import { validateTeamParam } from '../middleware/validate.js';
 
 const router = Router();
@@ -35,7 +36,9 @@ router.get('/match/:teamA/:teamB',
       }
       allScores.sort((a, b) => b.prob - a.prob);
 
-      res.json({ ...pred, scoreMatrix, topScores: allScores.slice(0, 10) });
+      const h2h = computeH2H(teamA, teamB, matches);
+
+      res.json({ ...pred, scoreMatrix, topScores: allScores.slice(0, 10), h2h });
     } catch (err) {
       next(err);
     }
