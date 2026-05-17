@@ -42,6 +42,7 @@ const state = {
   scenarioGroup:  'A',
   filter:         '',
   sort:           { col: 'elo', dir: -1 },  // dir: -1 = desc, 1 = asc
+  bracketView:    'tree',
 };
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -570,29 +571,285 @@ document.addEventListener('click', async e => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// BRACKET TREE VIEW
+// ════════════════════════════════════════════════════════════════════════════
+
+// SVG layout constants
+const BKT = (() => {
+  const slotW = 155, slotH = 30, slotGap = 6, matchGap = 10, colGap = 42, hdrH = 22;
+  const blockH = slotH * 2 + slotGap + matchGap;
+  const colW   = slotW + colGap;
+  const svgH   = 16 * blockH + hdrH;
+  const svgW   = 5  * colW + slotW + 8;
+  return { slotW, slotH, slotGap, matchGap, colGap, hdrH, blockH, colW, svgH, svgW };
+})();
+
+// Match centre Y (no header offset)
+function bktMcy(r, i) {
+  if (r === 0) return i * BKT.blockH + BKT.slotH + BKT.slotGap / 2;
+  return (bktMcy(r - 1, 2 * i) + bktMcy(r - 1, 2 * i + 1)) / 2;
+}
+
+function buildBracketData() {
+  if (!state.simResults) return null;
+  const groups = 'ABCDEFGHIJKL'.split('');
+  const probs  = state.simResults.probs;
+
+  // Rank each group by r16 probability to approximate finishing position
+  const groupRankings = {};
+  for (const g of groups) {
+    const ts = state.teams.filter(t => t.group === g);
+    ts.sort((a, b) => (probs[b.id]?.r16 ?? 0) - (probs[a.id]?.r16 ?? 0));
+    groupRankings[g] = ts;
+  }
+
+  const groupFirsts  = groups.map(g => groupRankings[g][0]?.id);
+  const groupSeconds = groups.map(g => groupRankings[g][1]?.id);
+  const groupThirds  = groups.map(g => groupRankings[g][2]?.id);
+
+  // Best 8 third-place teams
+  const best8Thirds = groups
+    .map((g, i) => ({ id: groupThirds[i], prob: probs[groupThirds[i]]?.r16 ?? 0, group: g }))
+    .sort((a, b) => b.prob - a.prob)
+    .slice(0, 8);
+
+  // R32: 16 matches (matches seeding rules from tournamentSimulation.js)
+  const r32 = [];
+  for (let i = 0; i < 8; i++) {
+    r32.push({ teamA: groupFirsts[i], teamB: best8Thirds[i]?.id });
+  }
+  for (let i = 0; i < 4; i++) {
+    r32.push({ teamA: groupFirsts[8 + i], teamB: groupSeconds[4 + i] });
+  }
+  for (let i = 0; i < 4; i++) {
+    r32.push({ teamA: groupSeconds[i], teamB: groupSeconds[8 + i] });
+  }
+
+  const bestOf = (a, b, key) => {
+    if (!a) return b; if (!b) return a;
+    return (probs[a]?.[key] ?? 0) >= (probs[b]?.[key] ?? 0) ? a : b;
+  };
+
+  const r32Winners = r32.map(m => bestOf(m.teamA, m.teamB, 'r16'));
+  const r16 = [];
+  for (let i = 0; i < 16; i += 2) r16.push({ teamA: r32Winners[i], teamB: r32Winners[i + 1] });
+
+  const r16Winners = r16.map(m => bestOf(m.teamA, m.teamB, 'qf'));
+  const qf = [];
+  for (let i = 0; i < 8; i += 2) qf.push({ teamA: r16Winners[i], teamB: r16Winners[i + 1] });
+
+  const qfWinners = qf.map(m => bestOf(m.teamA, m.teamB, 'sf'));
+  const sf = [];
+  for (let i = 0; i < 4; i += 2) sf.push({ teamA: qfWinners[i], teamB: qfWinners[i + 1] });
+
+  const sfWinners = sf.map(m => bestOf(m.teamA, m.teamB, 'final'));
+  const final = [{ teamA: sfWinners[0], teamB: sfWinners[1] }];
+  const champion = bestOf(final[0].teamA, final[0].teamB, 'winner');
+
+  return { r32, r16, qf, sf, final, champion, groupRankings };
+}
+
+function bktSlotBg(prob, isChamp) {
+  if (isChamp) return '#1a3a6e';
+  if (prob >= 0.4) return '#1e3a5f';
+  if (prob >= 0.15) return '#1e2d3d';
+  return '#1e293b';
+}
+function bktSlotBorder(prob, isChamp) {
+  if (isChamp) return '#d4af37';
+  if (prob >= 0.4) return '#3b82f6';
+  if (prob >= 0.15) return '#1d4ed8';
+  return '#334155';
+}
+function bktConnColor(prob) {
+  if (prob >= 0.4) return '#3b82f6';
+  if (prob >= 0.2) return '#1d4ed8';
+  return '#334155';
+}
+function bktProbColor(prob) {
+  if (prob >= 0.4) return '#22c55e';
+  if (prob >= 0.15) return '#f59e0b';
+  return '#94a3b8';
+}
+
+function buildSlotSvg(x, y, teamId, probs, probKey, isChamp = false) {
+  const { slotW: w, slotH: h } = BKT;
+  const prob = probs[teamId]?.[probKey] ?? 0;
+  const pct  = (prob * 100).toFixed(1) + '%';
+  const iso  = teamId ? FLAGS[teamId] : null;
+
+  if (!teamId) {
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#1e293b" stroke="#334155"/>
+            <text x="${x+w/2}" y="${y+h/2+4}" text-anchor="middle" font-family="system-ui" font-size="11" fill="#475569">TBD</text>`;
+  }
+
+  const bg  = bktSlotBg(prob, isChamp);
+  const bdr = bktSlotBorder(prob, isChamp);
+  const tc  = bktProbColor(prob);
+  const bw  = isChamp ? 1.5 : 1;
+
+  const parts = [
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${bg}" stroke="${bdr}" stroke-width="${bw}"/>`,
+  ];
+  if (iso) {
+    parts.push(`<image href="https://flagcdn.com/w20/${iso}.png" x="${x+6}" y="${y+(h-13)/2}" width="20" height="13"/>`);
+  }
+  parts.push(`<text x="${x+31}" y="${y+h/2+4}" font-family="system-ui" font-size="11" font-weight="700" fill="#f1f5f9">${teamId}</text>`);
+  parts.push(`<text x="${x+w-5}" y="${y+h/2+4}" text-anchor="end" font-family="system-ui" font-size="10" fill="${tc}">${pct}</text>`);
+
+  return `<g class="bkt-slot" data-team="${teamId}" data-prob-key="${probKey}">
+    ${parts.join('\n')}
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="transparent" class="bkt-hover-region"/>
+  </g>`;
+}
+
+function renderBracketTree() {
+  const container = document.getElementById('bracket-tree');
+  if (!state.simResults) {
+    container.innerHTML = '<div class="empty-state"><p>Run a simulation to see the visual bracket</p></div>';
+    return;
+  }
+
+  const bracket = buildBracketData();
+  const probs   = state.simResults.probs;
+  const { slotW, slotH, slotGap, colGap, hdrH, blockH, colW, svgH, svgW } = BKT;
+
+  const rounds = [
+    { label: 'R32',   probKey: 'r16',    matches: bracket.r32   },
+    { label: 'R16',   probKey: 'qf',     matches: bracket.r16   },
+    { label: 'QF',    probKey: 'sf',     matches: bracket.qf    },
+    { label: 'SF',    probKey: 'final',  matches: bracket.sf    },
+    { label: 'Final', probKey: 'winner', matches: bracket.final },
+  ];
+
+  const p = [];
+
+  // Round column headers
+  rounds.forEach((rd, r) => {
+    p.push(`<text x="${r*colW+slotW/2}" y="${hdrH-5}" text-anchor="middle" font-family="system-ui" font-size="10" font-weight="600" fill="#94a3b8" letter-spacing="0.06em">${rd.label}</text>`);
+  });
+  p.push(`<text x="${5*colW+slotW/2}" y="${hdrH-5}" text-anchor="middle" font-family="system-ui" font-size="10" font-weight="600" fill="#d4af37" letter-spacing="0.06em">WINNER</text>`);
+
+  // Slots and connectors per round
+  rounds.forEach((rd, r) => {
+    const sx = r * colW;
+    rd.matches.forEach((match, i) => {
+      const cy      = bktMcy(r, i) + hdrH;
+      const topY    = cy - slotGap / 2 - slotH;
+      const botY    = cy + slotGap / 2;
+      const gx      = sx + slotW + colGap / 2;
+      const teY     = topY + slotH / 2;
+      const beY     = botY + slotH / 2;
+
+      // Winner's probability for the outgoing connector colour
+      const wProb = Math.max(
+        probs[match.teamA]?.[rd.probKey] ?? 0,
+        probs[match.teamB]?.[rd.probKey] ?? 0,
+      );
+      const cc = bktConnColor(wProb);
+
+      // Bracket staple gathering the two input slots
+      p.push(`<path d="M${sx+slotW},${teY} H${gx} V${beY} H${sx+slotW}" fill="none" stroke="#334155" stroke-width="1.5"/>`);
+
+      if (r < rounds.length - 1) {
+        // L-shaped connector to next round's top or bottom slot
+        const ni    = Math.floor(i / 2);
+        const ncy   = bktMcy(r + 1, ni) + hdrH;
+        const ntopY = ncy - slotGap / 2 - slotH;
+        const nbotY = ncy + slotGap / 2;
+        const tgtY  = i % 2 === 0 ? ntopY + slotH / 2 : nbotY + slotH / 2;
+        p.push(`<path d="M${gx},${cy} V${tgtY} H${(r+1)*colW}" fill="none" stroke="${cc}" stroke-width="1.5"/>`);
+      } else {
+        // Final → Champion: simple horizontal line
+        p.push(`<line x1="${gx}" y1="${cy}" x2="${5*colW}" y2="${cy}" stroke="${cc}" stroke-width="2"/>`);
+      }
+
+      // Draw the two team slots
+      p.push(buildSlotSvg(sx, topY, match.teamA, probs, rd.probKey));
+      p.push(buildSlotSvg(sx, botY, match.teamB, probs, rd.probKey));
+    });
+  });
+
+  // Champion slot (centered on Final match Y)
+  const champCy = bktMcy(4, 0) + hdrH;
+  p.push(buildSlotSvg(5 * colW, champCy - slotH / 2, bracket.champion, probs, 'winner', true));
+
+  container.innerHTML = `
+    <div class="bracket-scroll">
+      <svg id="bracket-svg" viewBox="0 0 ${svgW} ${svgH}" width="${svgW}" height="${svgH}">
+        ${p.join('\n')}
+      </svg>
+    </div>
+    <div id="bkt-tooltip" class="bkt-tooltip hidden"></div>`;
+
+  setupBracketTooltip();
+}
+
+function setupBracketTooltip() {
+  const svg = document.getElementById('bracket-svg');
+  const tip = document.getElementById('bkt-tooltip');
+  if (!svg || !tip) return;
+
+  const probs  = state.simResults.probs;
+  const LABELS = { r16: 'R16', qf: 'QF', sf: 'SF', final: 'Final', winner: 'Winner' };
+
+  svg.addEventListener('mousemove', e => {
+    const slot = e.target.closest('.bkt-slot');
+    if (!slot) { tip.classList.add('hidden'); return; }
+
+    const teamId  = slot.dataset.team;
+    const probKey = slot.dataset.probKey;
+    const label   = LABELS[probKey] ?? probKey;
+
+    const top5 = [...state.teams]
+      .filter(t => (probs[t.id]?.[probKey] ?? 0) > 0)
+      .sort((a, b) => (probs[b.id]?.[probKey] ?? 0) - (probs[a.id]?.[probKey] ?? 0))
+      .slice(0, 5);
+
+    tip.innerHTML = `
+      <div class="bkt-tip-title">Top 5 — Reach ${label}</div>
+      ${top5.map((t, i) => {
+        const p = ((probs[t.id]?.[probKey] ?? 0) * 100).toFixed(1);
+        return `<div class="bkt-tip-row${t.id === teamId ? ' bkt-tip-current' : ''}">
+          <span class="bkt-tip-rank">${i + 1}</span>
+          ${flag(t.id)}<span class="bkt-tip-team">${t.id}</span>
+          <span class="bkt-tip-prob">${p}%</span>
+        </div>`;
+      }).join('')}`;
+
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top  = (e.clientY - 10) + 'px';
+    tip.classList.remove('hidden');
+  });
+
+  svg.addEventListener('mouseleave', () => tip.classList.add('hidden'));
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // BRACKET VIEW
 // ════════════════════════════════════════════════════════════════════════════
 
 function renderBracket() {
-  const tbody  = document.getElementById('bracket-tbody');
-  const cards  = document.getElementById('champion-cards');
-  const info   = document.getElementById('bracket-sim-info');
+  const cards = document.getElementById('champion-cards');
+  const info  = document.getElementById('bracket-sim-info');
 
   if (!state.simResults) {
-    tbody.innerHTML  = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Run a simulation to see tournament odds</td></tr>`;
     cards.innerHTML  = '';
     info.textContent = '';
+    // Show empty states in both views
+    const tbody = document.getElementById('bracket-tbody');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Run a simulation to see tournament odds</td></tr>`;
+    const tree = document.getElementById('bracket-tree');
+    if (tree) tree.innerHTML = '<div class="empty-state"><p>Run a simulation to see the visual bracket</p></div>';
     return;
   }
 
-  const meta = state.simMeta;
-  info.textContent = `${meta.n.toLocaleString()} simulations · ${meta.elapsedMs}ms`;
+  info.textContent = `${state.simMeta.n.toLocaleString()} simulations · ${state.simMeta.elapsedMs}ms`;
 
-  // Top-5 champion cards
-  const top5 = [...state.teams]
+  // Top-5 champion cards (always shown)
+  const top5  = [...state.teams]
     .sort((a, b) => (teamProbs(b.id)?.winner ?? 0) - (teamProbs(a.id)?.winner ?? 0))
     .slice(0, 5);
-
   const ranks = ['1st', '2nd', '3rd', '4th', '5th'];
   cards.innerHTML = top5.map((t, i) => {
     const pct = ((teamProbs(t.id)?.winner ?? 0) * 100).toFixed(1);
@@ -606,18 +863,24 @@ function renderBracket() {
       </div>`;
   }).join('');
 
-  // Full probability table sorted by winner%
+  if (state.bracketView === 'tree') {
+    renderBracketTree();
+  } else {
+    renderBracketTable();
+  }
+}
+
+function renderBracketTable() {
+  const tbody  = document.getElementById('bracket-tbody');
   const sorted = [...state.teams].sort((a, b) =>
     (teamProbs(b.id)?.winner ?? 0) - (teamProbs(a.id)?.winner ?? 0)
   );
-
   const cell = v => {
     if (!v) return `<td style="color:var(--border)">—</td>`;
     const alpha = Math.min(0.65, v * 5);
     const bold  = v >= 0.05 ? 'font-weight:700' : '';
     return `<td style="background:rgba(59,130,246,${alpha.toFixed(2)});${bold}">${(v*100).toFixed(1)}%</td>`;
   };
-
   tbody.innerHTML = sorted.map(t => {
     const pr = state.simResults.probs[t.id] ?? {};
     return `
@@ -649,6 +912,23 @@ function initBracketView() {
       btn.disabled = false;
       btn.textContent = 'Run 10,000 Simulations';
     }
+  });
+
+  // Tree / Table view toggle
+  document.querySelectorAll('#bracket-view-toggle .view-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      if (state.bracketView === view) return;
+      state.bracketView = view;
+      document.querySelectorAll('#bracket-view-toggle .view-toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('bracket-tree-view').style.display  = view === 'tree'  ? '' : 'none';
+      document.getElementById('bracket-table-view').style.display = view === 'table' ? '' : 'none';
+      if (state.simResults) {
+        if (view === 'tree') renderBracketTree();
+        else renderBracketTable();
+      }
+    });
   });
 }
 
