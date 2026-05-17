@@ -31,6 +31,7 @@ const state = {
   fixtures:       [],
   teamById:       {},
   simResults:     null,
+  simGroups:      null,
   simMeta:        null,
   scenarioResults: null,
   lockedResults:  {},   // real match results persisted on server { matchKey: { goalsA, goalsB } }
@@ -295,15 +296,92 @@ async function renderMatchesGroup(group) {
         </thead>
         <tbody>${fixtures.map(fixtureRowHtml).join('')}</tbody>
       </table>
-    </div>`;
+    </div>
+    <div id="group-standings-container"></div>`;
 
   fixtures.forEach(f => {
     document.querySelector(`tr[data-match="${f.id}"]`)
       ?.addEventListener('click', () => toggleMatch(f));
   });
 
+  renderGroupStandings(group);
+
   // Pre-load predictions (all 6 in parallel)
   fixtures.forEach(f => prefetchPrediction(f));
+}
+
+function renderGroupStandings(group) {
+  const container = document.getElementById('group-standings-container');
+  if (!container) return;
+
+  const gs = state.simGroups?.[group];
+  if (!gs) {
+    container.innerHTML = `<p class="gs-no-sim">Run a simulation to see projected group standings</p>`;
+    return;
+  }
+
+  // Sort teams by avgPts desc, then avgGd desc
+  const teams = Object.entries(gs)
+    .map(([id, s]) => ({ id, ...s }))
+    .sort((a, b) => b.avgPts - a.avgPts || b.avgGd - a.avgGd);
+
+  const qualBar = (pQual) => {
+    const pct = (pQual * 100).toFixed(0);
+    const color = pQual >= 0.7 ? 'var(--win)' : pQual >= 0.4 ? 'var(--draw)' : 'var(--loss)';
+    return `<div class="gs-qual-bar-wrap">
+      <div class="gs-qual-bar" style="width:${pct}%;background:${color}"></div>
+    </div>
+    <span class="gs-qual-pct" style="color:${color}">${pct}%</span>`;
+  };
+
+  const probCell = (p, isGood) => {
+    const pct = (p * 100).toFixed(1);
+    const alpha = isGood ? Math.min(0.7, p * 1.4) : Math.min(0.6, p * 1.2);
+    const bg = isGood
+      ? `rgba(34,197,94,${alpha.toFixed(2)})`
+      : `rgba(239,68,68,${alpha.toFixed(2)})`;
+    return `<td class="gs-prob-cell" style="background:${bg}">${pct}%</td>`;
+  };
+
+  const rows = teams.map((t, i) => {
+    const name = state.teamById[t.id]?.name ?? t.id;
+    const gd   = t.avgGd >= 0 ? `+${t.avgGd.toFixed(1)}` : t.avgGd.toFixed(1);
+    return `<tr>
+      <td class="gs-pos">${i + 1}</td>
+      <td class="gs-team">${flag(t.id)}<strong>${t.id}</strong> <span class="gs-name">${name}</span></td>
+      <td class="gs-num">${t.avgPts.toFixed(1)}</td>
+      <td class="gs-num ${t.avgGd >= 0 ? 'gs-pos-gd' : 'gs-neg-gd'}">${gd}</td>
+      ${probCell(t.p1st, true)}
+      ${probCell(t.p2nd, true)}
+      ${probCell(t.p4th, false)}
+      <td class="gs-qual-cell">${qualBar(t.pQual)}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="gs-section">
+      <div class="gs-header">
+        Simulated Standings
+        <span class="gs-sub">${state.simMeta.n.toLocaleString()} simulations</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table gs-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Team</th>
+              <th title="Average points after 3 matches">Avg Pts</th>
+              <th title="Average goal difference">Avg GD</th>
+              <th title="Probability of finishing 1st">1st</th>
+              <th title="Probability of finishing 2nd">2nd</th>
+              <th title="Probability of finishing 4th (eliminated)">Out</th>
+              <th title="Probability of qualifying (1st, 2nd, or best 3rd)">Qualify</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 function matchKey(f) { return `${f.group}-${f.home}-${f.away}`; }
@@ -495,10 +573,12 @@ async function afterResultChange(results) {
   try {
     const data = await simulate(10_000);
     state.simResults = data;
+    state.simGroups  = data.groups ?? null;
     state.simMeta    = data.meta;
     setSimStatus(`${data.meta.n.toLocaleString()} sims · ${data.meta.elapsedMs}ms`);
     renderTeamsTable();
     if (state.selectedTeamId) renderTeamDetail();
+    renderGroupStandings(state.matchGroup);
     if (document.getElementById('tab-bracket').classList.contains('active')) renderBracket();
   } catch {
     setSimStatus('Simulation failed');
@@ -901,6 +981,7 @@ function initBracketView() {
     try {
       const data = await simulate(10_000);
       state.simResults = data;
+      state.simGroups  = data.groups ?? null;
       state.simMeta    = data.meta;
       setSimStatus(`${data.meta.n.toLocaleString()} sims · ${data.meta.elapsedMs}ms`);
       renderBracket();
@@ -1117,10 +1198,12 @@ async function init() {
     try {
       const data = await simulate(10_000);
       state.simResults = data;
+      state.simGroups  = data.groups ?? null;
       state.simMeta    = data.meta;
       setSimStatus(`${data.meta.n.toLocaleString()} sims · ${data.meta.elapsedMs}ms`);
       renderTeamsTable();
       if (state.selectedTeamId) renderTeamDetail();
+      renderGroupStandings(state.matchGroup);
       if (document.getElementById('tab-bracket').classList.contains('active')) renderBracket();
     } catch {
       setSimStatus('Simulation unavailable');

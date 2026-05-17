@@ -19,8 +19,8 @@ router.post('/simulate', validateNumSims, async (req, res, next) => {
     const merged = { ...lockedResults, ...getResults() };
 
     const t0 = Date.now();
-    const { probs, meta } = runMonteCarlo(numSims, params, merged);
-    res.json({ probs, meta: { ...meta, elapsedMs: Date.now() - t0 } });
+    const { probs, groups, meta } = runMonteCarlo(numSims, params, merged);
+    res.json({ probs, groups, meta: { ...meta, elapsedMs: Date.now() - t0 } });
   } catch (err) {
     next(err);
   }
