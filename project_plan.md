@@ -187,7 +187,7 @@ backend/data/computeH2H.js
 backend/data/fetchMatches.js   (fetchAllMatches added)
 ```
 
-### Post-MVP enhancements (delivered May 16)
+### Post-MVP enhancements (delivered May 16–17)
 
 | Issue | Feature | PR |
 |-------|---------|-----|
@@ -195,6 +195,9 @@ backend/data/fetchMatches.js   (fetchAllMatches added)
 | #3 | Match countdown timers + LIVE pulse badges | #36 |
 | #7 | Head-to-head record overlay in match detail panel | #37 |
 | — | Full all-time H2H history (separate from 2010+ model dataset) | #38 |
+| #15 | Visual SVG knockout bracket tree with probability overlays + Tree/Table toggle | #39 |
+| #16 | Simulated group standings table (avg pts, avg GD, finish probabilities) below each group's fixtures | #42 |
+| — | Bilingual EN/DE UI with language toggle; German team names; preference persisted in localStorage | #43 |
 
 ---
 

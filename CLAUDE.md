@@ -130,6 +130,7 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
   index.html
   app.js
   charts.js
+  i18n.js       # EN/DE string table; t(), getLang(), setLang(), teamName() exports
   styles.css
 ```
 
