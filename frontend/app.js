@@ -146,6 +146,7 @@ function switchTab(tab) {
   document.getElementById(`tab-${tab}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${tab}"]`)?.classList.add('active');
   if (tab === 'bracket') renderBracket();
+  if (tab === 'groups')  renderGroupsTab();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1141,6 +1142,160 @@ function initBracketView() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// GROUPS OF DEATH TAB
+// ════════════════════════════════════════════════════════════════════════════
+
+// Elo-based head-to-head win probability
+const _eloPwin = (a, b) => 1 / (1 + Math.pow(10, (b - a) / 400));
+
+function computeGroupStats() {
+  const GROUPS = 'ABCDEFGHIJKL'.split('');
+
+  const raw = GROUPS.map(g => {
+    const teams = state.teams.filter(tm => tm.group === g);
+    const elos  = teams.map(tm => tm.elo ?? 1500);
+    const avgElo   = elos.reduce((s, v) => s + v, 0) / elos.length;
+    const maxElo   = Math.max(...elos);
+    const minElo   = Math.min(...elos);
+    const eloRange = maxElo - minElo;
+    const compet   = maxElo > 0 ? 1 - eloRange / maxElo : 0;
+
+    const mkts    = teams.map(tm => tm.marketValueM ?? 0).filter(v => v > 0);
+    const avgMkt  = mkts.length ? Math.round(mkts.reduce((s, v) => s + v, 0) / mkts.length) : 0;
+
+    // Count pairwise matchups within 10% of 50/50 (close game)
+    let closeMatches = 0;
+    for (let i = 0; i < teams.length; i++) {
+      for (let j = i + 1; j < teams.length; j++) {
+        if (Math.abs(_eloPwin(elos[i], elos[j]) - 0.5) < 0.10) closeMatches++;
+      }
+    }
+
+    // Sim-dependent metrics
+    let likelyQualifiers = [], upsetRisk = null, avgWinnerPts = null, p3rdChance = null;
+    const gs = state.simGroups?.[g];
+    if (gs) {
+      const withSim = teams.map(tm => ({ ...tm, ...gs[tm.id] }));
+      likelyQualifiers = [...withSim].sort((a, b) => b.pQual - a.pQual).slice(0, 2);
+
+      // Upset risk: avg(1 - pQual) for the 2 highest-Elo teams
+      const topTwo = [...withSim].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0)).slice(0, 2);
+      upsetRisk = topTwo.reduce((s, tm) => s + (1 - (tm.pQual ?? 1)), 0) / 2;
+
+      // Avg winner points weighted by p1st
+      const totalP1st = withSim.reduce((s, tm) => s + (tm.p1st ?? 0), 0);
+      avgWinnerPts = totalP1st > 0
+        ? withSim.reduce((s, tm) => s + (tm.p1st ?? 0) * (tm.avgPts ?? 0), 0) / totalP1st
+        : null;
+
+      // Prob this group sends a best-3rd qualifier = sum(pQual - p1st - p2nd) across teams
+      p3rdChance = withSim.reduce((s, tm) => s + Math.max(0, (tm.pQual ?? 0) - (tm.p1st ?? 0) - (tm.p2nd ?? 0)), 0);
+    }
+
+    return { group: g, teams, avgElo, maxElo, minElo, eloRange, compet, avgMkt, closeMatches,
+             likelyQualifiers, upsetRisk, avgWinnerPts, p3rdChance };
+  });
+
+  // Normalise avgElo to [0,1] for composite + bar widths
+  const avgElos   = raw.map(s => s.avgElo);
+  const minAE     = Math.min(...avgElos);
+  const maxAE     = Math.max(...avgElos);
+  const aeRange   = maxAE - minAE || 1;
+
+  raw.forEach(s => {
+    s.strengthPct = Math.round((s.avgElo - minAE) / aeRange * 100);
+    s.composite   = 0.6 * (s.avgElo - minAE) / aeRange + 0.4 * s.compet;
+  });
+
+  return raw.sort((a, b) => b.composite - a.composite);
+}
+
+function renderGroupCard(s, rank) {
+  const isTop    = rank === 0;
+  const scorePct = (s.composite * 100).toFixed(1);
+  const teamRows = s.teams
+    .sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0))
+    .map(tm => `
+      <div class="gc-team">
+        ${flag(tm.id)}<span class="gc-team-id">${tm.id}</span>
+        <span class="gc-team-elo">${tm.elo != null ? Math.round(tm.elo) : '—'}</span>
+      </div>`).join('');
+
+  let breakdownHtml;
+  if (!state.simGroups) {
+    breakdownHtml = `<p class="gc-nosim">${t('gcNoSim')}</p>`;
+  } else {
+    const q = s.likelyQualifiers;
+    const qualStr = q.length
+      ? q.map(tm => `${flag(tm.id)}<strong>${tm.id}</strong> ${fmtPct(tm.pQual)}`).join('&nbsp;&nbsp;')
+      : '—';
+    breakdownHtml = `
+      <div class="gc-detail-grid">
+        <span class="gc-dl">${t('gcLikelyQual')}</span>
+        <span class="gc-dv">${qualStr}</span>
+        <span class="gc-dl">${t('gcUpsetRisk')}</span>
+        <span class="gc-dv${s.upsetRisk > 0.15 ? ' gc-dv--warn' : ''}">${s.upsetRisk != null ? fmtPct(s.upsetRisk) : '—'}</span>
+        <span class="gc-dl">${t('gcWinnerPts')}</span>
+        <span class="gc-dv">${s.avgWinnerPts != null ? s.avgWinnerPts.toFixed(1) : '—'}</span>
+        <span class="gc-dl">${t('gc3rdChance')}</span>
+        <span class="gc-dv">${s.p3rdChance != null ? fmtPct(s.p3rdChance) : '—'}</span>
+      </div>`;
+  }
+
+  return `
+    <div class="group-card${isTop ? ' group-card--top' : ''}" data-group="${s.group}">
+      <div class="gc-header">
+        <div class="gc-rank">#${rank + 1}</div>
+        <div class="gc-identity">
+          <div class="gc-name-row">
+            <span class="gc-name">${t('thGrp')} ${s.group}</span>
+            ${isTop ? `<span class="badge badge-god">${t('godBadge')}</span>` : ''}
+          </div>
+          <div class="gc-flags">${s.teams.map(tm => flag(tm.id)).join('')}</div>
+        </div>
+        <div class="gc-bars">
+          <div class="gc-bar-row">
+            <span class="gc-bar-lbl">${t('gcStrength')}</span>
+            <div class="gc-bar"><div class="gc-bar-fill" style="width:${Math.max(4, s.strengthPct)}%"></div></div>
+            <span class="gc-bar-val">${t('gcAvgElo', Math.round(s.avgElo))}</span>
+          </div>
+          <div class="gc-bar-row">
+            <span class="gc-bar-lbl">${t('gcBalance')}</span>
+            <div class="gc-bar"><div class="gc-bar-fill gc-bar-fill--bal" style="width:${Math.max(4, Math.round(s.compet * 100))}%"></div></div>
+            <span class="gc-bar-val">${t('gcSpread', Math.round(s.eloRange))}</span>
+          </div>
+        </div>
+        <div class="gc-score-col">
+          <div class="gc-score">${scorePct}</div>
+          <div class="gc-score-lbl">${t('gcScore')}</div>
+        </div>
+      </div>
+      <div class="gc-teams-grid">${teamRows}</div>
+      <details class="gc-details">
+        <summary class="gc-summary">${t('gcBreakdown')}</summary>
+        ${breakdownHtml}
+      </details>
+    </div>`;
+}
+
+function renderGroupsTab() {
+  const content = document.getElementById('groups-content');
+  if (!content) return;
+
+  const stats = computeGroupStats();
+  content.innerHTML = stats.map((s, i) => renderGroupCard(s, i)).join('');
+
+  // Update methodology tooltip text reactively (language may have changed)
+  const tip = document.getElementById('groups-method-tip');
+  if (tip) tip.title = t('groupsMethodTip');
+}
+
+function initGroupsTab() {
+  const tip = document.getElementById('groups-method-tip');
+  if (tip) tip.title = t('groupsMethodTip');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // SCENARIO URL ENCODING
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -1401,6 +1556,7 @@ function rerenderAll() {
   if (state.scenarioResults) renderScenarioResults();
   const bracketTab = document.getElementById('tab-bracket');
   if (bracketTab?.classList.contains('active') && state.simResults) renderBracket();
+  if (document.getElementById('tab-groups')?.classList.contains('active')) renderGroupsTab();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1439,6 +1595,7 @@ async function init() {
 
     initTeamsView();
     initMatchesView();
+    initGroupsTab();
     initBracketView();
     initScenarioView();
     renderTeamsTable();
@@ -1472,6 +1629,7 @@ async function init() {
       if (state.selectedTeamId) renderTeamDetail();
       renderGroupStandings(state.matchGroup);
       if (document.getElementById('tab-bracket').classList.contains('active')) renderBracket();
+      if (document.getElementById('tab-groups')?.classList.contains('active')) renderGroupsTab();
     } catch {
       setSimStatus(t('statusUnavailable'));
     }
