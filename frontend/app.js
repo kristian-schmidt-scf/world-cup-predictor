@@ -1141,6 +1141,61 @@ function initBracketView() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// SCENARIO URL ENCODING
+// ════════════════════════════════════════════════════════════════════════════
+
+// Format: ?s=G-HOME-AWAY-gA-gB,G-HOME-AWAY-gA-gB,...
+// e.g.    ?s=J-ARG-AUT-2-0,J-ALG-JOR-0-0
+
+function encodeScenario(locks) {
+  const entries = Object.entries(locks);
+  if (!entries.length) return '';
+  return entries
+    .map(([key, { goalsA, goalsB }]) => `${key}-${goalsA}-${goalsB}`)
+    .join(',');
+}
+
+function decodeScenario(param) {
+  const locks = {};
+  if (!param) return locks;
+  for (const entry of param.split(',')) {
+    if (!entry.trim()) continue;
+    const parts  = entry.split('-');
+    if (parts.length < 5) continue;           // need group-home-away-gA-gB (≥5 segments)
+    const goalsB = parseInt(parts[parts.length - 1], 10);
+    const goalsA = parseInt(parts[parts.length - 2], 10);
+    const key    = parts.slice(0, parts.length - 2).join('-');
+    if (!isNaN(goalsA) && !isNaN(goalsB) && key) {
+      locks[key] = { goalsA, goalsB };
+    }
+  }
+  return locks;
+}
+
+function updateScenarioUrl() {
+  const encoded = encodeScenario(state.scenarioLocks);
+  const url     = new URL(window.location.href);
+  if (encoded) {
+    url.searchParams.set('s', encoded);
+  } else {
+    url.searchParams.delete('s');
+  }
+  history.replaceState(null, '', url.toString());
+}
+
+function getShareText() {
+  const entries = Object.entries(state.scenarioLocks);
+  if (!entries.length) return null;
+  const lines = entries.map(([key, { goalsA, goalsB }]) => {
+    const parts = key.split('-');
+    const hn = getTeamName(parts[1]);
+    const an = getTeamName(parts[2]);
+    return `${hn} ${goalsA}–${goalsB} ${an}`;
+  });
+  return `WC 2026 scenario:\n${lines.join('\n')}\n${window.location.href}`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // SCENARIO VIEW
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -1192,6 +1247,7 @@ function renderScenarioMatches(group) {
         const scores = { win: { goalsA:2, goalsB:0 }, draw: { goalsA:0, goalsB:0 }, loss: { goalsA:0, goalsB:2 } };
         state.scenarioLocks[key] = scores[outcome];
       }
+      updateScenarioUrl();
       renderScenarioMatches(group);
     });
   });
@@ -1283,9 +1339,39 @@ function initScenarioView() {
   document.getElementById('clear-scenario-btn').addEventListener('click', () => {
     state.scenarioLocks = {};
     state.scenarioResults = null;
+    updateScenarioUrl();
     renderScenarioMatches(state.scenarioGroup);
     document.getElementById('scenario-results').innerHTML =
       `<div class="empty-state"><p>${t('scenarioNoSim')}</p></div>`;
+  });
+
+  document.getElementById('copy-link-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('copy-link-btn');
+    updateScenarioUrl();
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      btn.textContent = t('copied');
+    } catch {
+      btn.textContent = t('copyFailed');
+    }
+    setTimeout(() => { btn.textContent = t('copyLink'); }, 1500);
+  });
+
+  document.getElementById('share-text-btn').addEventListener('click', async () => {
+    const btn  = document.getElementById('share-text-btn');
+    const text = getShareText();
+    if (!text) {
+      btn.textContent = t('shareNoLocks');
+      setTimeout(() => { btn.textContent = t('shareScenario'); }, 1500);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = t('copied');
+    } catch {
+      btn.textContent = t('copyFailed');
+    }
+    setTimeout(() => { btn.textContent = t('shareScenario'); }, 1500);
   });
 
   renderScenarioMatches('A');
@@ -1333,6 +1419,16 @@ async function init() {
     state.teamById      = Object.fromEntries(state.teams.map(tm => [tm.id, tm]));
     state.lockedResults = resultsData;
 
+    // Restore scenario locks from URL ?s= param (before initScenarioView renders)
+    const _sParam = new URLSearchParams(window.location.search).get('s');
+    if (_sParam) {
+      const decoded   = decodeScenario(_sParam);
+      const validKeys = new Set(state.fixtures.map(f => matchKey(f)));
+      state.scenarioLocks = Object.fromEntries(
+        Object.entries(decoded).filter(([k]) => validKeys.has(k))
+      );
+    }
+
     document.getElementById('loading').classList.add('hidden');
     applyStaticTranslations();
 
@@ -1346,6 +1442,13 @@ async function init() {
     initBracketView();
     initScenarioView();
     renderTeamsTable();
+
+    // Auto-navigate to Scenario tab and correct group if URL had locks
+    if (_sParam && Object.keys(state.scenarioLocks).length) {
+      switchTab('scenario');
+      const firstGroup = Object.keys(state.scenarioLocks)[0].split('-')[0];
+      document.querySelector(`#scenario-group-tabs .group-tab[data-group="${firstGroup}"]`)?.click();
+    }
 
     // Wire up language toggle button
     const langBtn = document.getElementById('lang-btn');
