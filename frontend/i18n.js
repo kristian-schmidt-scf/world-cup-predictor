@@ -46,7 +46,14 @@ const STRINGS = {
 
     // Fixture row / detail
     loading:       'Loading…',
-    scoreProbTitle:'Score probabilities — top 10 most likely scorelines',
+    scoreProbTitle:  'Score probabilities',
+    hmViewHeatmap:   'Heatmap',
+    hmViewBar:       'Bar',
+    hmHomeGoals:     'Home goals',
+    hmAwayGoals:     'Away goals',
+    hmWin:           'Win',
+    hmDraw:          'Draw',
+    hmLoss:          'Loss',
     resultLocked:  'Result locked',
     unlockBtn:     'Unlock',
     lockResult:    'Lock result',
@@ -238,7 +245,14 @@ const STRINGS = {
 
     // Fixture row / detail
     loading:       'Laden…',
-    scoreProbTitle:'Ergebniswahrscheinlichkeiten — Top 10 wahrscheinlichste Spielstände',
+    scoreProbTitle:  'Ergebniswahrscheinlichkeiten',
+    hmViewHeatmap:   'Heatmap',
+    hmViewBar:       'Balken',
+    hmHomeGoals:     'Heimtore',
+    hmAwayGoals:     'Auswärtstore',
+    hmWin:           'Sieg',
+    hmDraw:          'Unentschieden',
+    hmLoss:          'Niederlage',
     resultLocked:  'Ergebnis gespeichert',
     unlockBtn:     'Freigeben',
     lockResult:    'Ergebnis festlegen',

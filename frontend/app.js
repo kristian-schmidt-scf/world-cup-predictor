@@ -1,4 +1,4 @@
-import { createAttackDefenseChart, createScoreHistogram } from './charts.js';
+import { createAttackDefenseChart, createScoreHistogram, createScoreHeatmap } from './charts.js';
 import { t, getLang, setLang, teamName } from './i18n.js';
 import { drawTournamentFlow } from './sankey.js';
 
@@ -560,10 +560,17 @@ function fixtureRowHtml(f) {
             <div id="meta-${f.id}" style="color:var(--muted);font-size:13px;margin-top:12px">${t('loading')}</div>
           </div>
           <div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-              ${t('scoreProbTitle')}
+            <div class="score-chart-header">
+              <span style="font-size:11px;color:var(--muted)">${t('scoreProbTitle')}</span>
+              <div class="score-view-toggle">
+                <button class="score-view-btn active" data-view="heatmap" data-fid="${f.id}">${t('hmViewHeatmap')}</button>
+                <button class="score-view-btn" data-view="bar" data-fid="${f.id}">${t('hmViewBar')}</button>
+              </div>
             </div>
-            <div class="score-chart-wrap"><canvas id="hist-${f.id}"></canvas></div>
+            <div class="score-chart-wrap">
+              <div id="heat-${f.id}" class="hm-outer"></div>
+              <canvas id="hist-${f.id}" style="display:none"></canvas>
+            </div>
           </div>
         </div>
       </td>
@@ -639,7 +646,31 @@ function renderMatchDetailPanel(f, pred) {
     </div>
     ${h2hHtml}`;
 
-  createScoreHistogram(`hist-${f.id}`, pred.topScores);
+  createScoreHeatmap(`heat-${f.id}`, pred.scoreMatrix, {
+    homeLabel: t('hmHomeGoals'),
+    awayLabel: t('hmAwayGoals'),
+    winLabel:  t('hmWin'),
+    drawLabel: t('hmDraw'),
+    lossLabel: t('hmLoss'),
+  });
+
+  const detailRow = document.getElementById(`detail-${f.id}`);
+  detailRow?.querySelectorAll('.score-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      detailRow.querySelectorAll('.score-view-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const heatEl = document.getElementById(`heat-${f.id}`);
+      const histEl = document.getElementById(`hist-${f.id}`);
+      if (btn.dataset.view === 'heatmap') {
+        heatEl.style.display = '';
+        histEl.style.display = 'none';
+      } else {
+        heatEl.style.display = 'none';
+        histEl.style.display = '';
+        createScoreHistogram(`hist-${f.id}`, pred.topScores);
+      }
+    });
+  });
 }
 
 function buildH2HHtml(f, pred) {
