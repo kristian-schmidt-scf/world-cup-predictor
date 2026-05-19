@@ -127,6 +127,13 @@ const STRINGS = {
     thFinalBaseScen:  'Final base → scen',
     thWinnerBaseScen: 'Winner base → scen',
 
+    // Shareable scenario URLs
+    copyLink:       'Copy Link',
+    shareScenario:  'Share',
+    copied:         'Copied!',
+    copyFailed:     'Failed',
+    shareNoLocks:   'No locks',
+
     // Sankey flow diagram
     sankeyTitle:      'Tournament Flow',
     sankeyToggle:     'Show Flow Diagram',
@@ -291,6 +298,13 @@ const STRINGS = {
     thR16BaseScen:    'R16 Basis → Sz.',
     thFinalBaseScen:  'Finale Basis → Sz.',
     thWinnerBaseScen: 'Sieger Basis → Sz.',
+
+    // Shareable scenario URLs
+    copyLink:       'Link kopieren',
+    shareScenario:  'Teilen',
+    copied:         'Kopiert!',
+    copyFailed:     'Fehler',
+    shareNoLocks:   'Keine Spiele',
 
     // Sankey flow diagram
     sankeyTitle:      'Turnierverlauf',

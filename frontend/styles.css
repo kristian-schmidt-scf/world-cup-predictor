@@ -441,7 +441,7 @@ a { color: var(--accent); }
 .result-btn.btn-clear { color: var(--loss); border-color: rgba(239,68,68,.4); }
 .result-btn.btn-clear:hover { background: var(--loss); border-color: var(--loss); color: #fff; }
 
-.scenario-actions { display: flex; gap: 8px; margin-top: 14px; }
+.scenario-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 
 /* Comparison results */
 .scenario-results h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
