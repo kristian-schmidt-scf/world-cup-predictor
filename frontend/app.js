@@ -1,5 +1,6 @@
 import { createAttackDefenseChart, createScoreHistogram } from './charts.js';
 import { t, getLang, setLang, teamName } from './i18n.js';
+import { drawTournamentFlow } from './sankey.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const API = '/api';
@@ -40,6 +41,8 @@ const state = {
   lockedResults:  {},   // real match results persisted on server { matchKey: { goalsA, goalsB } }
   scenarioLocks:  {},   // hypothetical scenario locks (Scenario Explorer only)
   selectedTeamId: null,
+  compareTeamId:  null,   // second team for Sankey comparison
+  sankeyVisible:  false,  // whether the Sankey diagram section is expanded
   matchCache:     {},   // { 'FRA-ARG': prediction }
   expandedMatch:  null,
   matchGroup:     'A',
@@ -192,10 +195,81 @@ function renderTeamsTable() {
     tr.addEventListener('click', () => {
       const id = tr.dataset.team;
       state.selectedTeamId = state.selectedTeamId === id ? null : id;
+      if (state.compareTeamId === state.selectedTeamId) state.compareTeamId = null;
       renderTeamsTable();
       renderTeamDetail();
     });
   });
+}
+
+// ── Sankey helpers ─────────────────────────────────────────────────────────────
+
+function buildSankeyStages(teamId) {
+  const pr = teamProbs(teamId);
+  if (!pr) return null;
+  const tm     = state.teamById[teamId];
+  const pQual  = state.simGroups?.[tm.group]?.[teamId]?.pQual ?? pr.r16;
+  return [
+    { label: t('sankeyStageStart'), prob: 1.0 },
+    { label: t('sankeyStageGroup'), prob: pQual },
+    { label: t('sankeyStageR16'),   prob: pr.r16 },
+    { label: t('sankeyStageQF'),    prob: pr.qf },
+    { label: t('sankeyStageSF'),    prob: pr.sf },
+    { label: t('sankeyStageFinal'), prob: pr.final },
+    { label: t('sankeyStageWin'),   prob: pr.winner },
+  ];
+}
+
+function renderSankeySection() {
+  const wrap = document.getElementById('sankey-canvas-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+
+  const stages1 = buildSankeyStages(state.selectedTeamId);
+  if (!stages1) return;
+
+  const tm1 = state.teamById[state.selectedTeamId];
+  const stageClickHandler = (tm) => (idx) => {
+    if (idx <= 1) {
+      switchTab('matches');
+      document.querySelector(`#group-tabs .group-tab[data-group="${tm.group}"]`)?.click();
+    } else {
+      switchTab('bracket');
+    }
+  };
+
+  const stages2 = state.compareTeamId ? buildSankeyStages(state.compareTeamId) : null;
+
+  if (!stages2) {
+    const slot = document.createElement('div');
+    wrap.appendChild(slot);
+    drawTournamentFlow(slot, stages1, {
+      color: '#3b82f6',
+      title: getTeamName(state.selectedTeamId),
+      onStageClick: stageClickHandler(tm1),
+    });
+  } else {
+    const tm2  = state.teamById[state.compareTeamId];
+    const row  = document.createElement('div');
+    row.className = 'sankey-compare-row';
+    const h1 = document.createElement('div');
+    h1.className = 'sankey-half';
+    drawTournamentFlow(h1, stages1, {
+      color: '#3b82f6',
+      title: getTeamName(state.selectedTeamId),
+      onStageClick: stageClickHandler(tm1),
+    });
+    const h2 = document.createElement('div');
+    h2.className = 'sankey-half';
+    drawTournamentFlow(h2, stages2, {
+      color: '#f59e0b',
+      title: getTeamName(state.compareTeamId),
+      onStageClick: stageClickHandler(tm2),
+    });
+    row.appendChild(h1);
+    row.appendChild(h2);
+    wrap.appendChild(row);
+  }
 }
 
 function renderTeamDetail() {
@@ -226,6 +300,23 @@ function renderTeamDetail() {
     ? `${tm.record.wins}${t('h2hW')} ${tm.record.draws}${t('h2hD')} ${tm.record.losses}${t('h2hL')}`
     : '—';
 
+  // Compare options for Sankey dropdown (all teams except current)
+  const compareOptions = state.teams
+    .filter(t2 => t2.id !== tm.id)
+    .map(t2 => `<option value="${t2.id}"${t2.id === state.compareTeamId ? ' selected' : ''}>${t2.id} — ${getTeamName(t2.id)}</option>`)
+    .join('');
+
+  const sankeyBodyHtml = pr ? `
+    <div class="sankey-controls">
+      <label class="sankey-compare-lbl">${t('sankeyCompare')}</label>
+      <select id="sankey-compare-sel" class="sankey-select">
+        <option value="">${t('sankeyCompareNone')}</option>
+        ${compareOptions}
+      </select>
+    </div>
+    <div id="sankey-canvas-wrap"></div>
+  ` : `<p class="sankey-no-sim">${t('sankeyNoSim')}</p>`;
+
   panel.innerHTML = `
     <div class="team-name">${flag(tm.id)}${getTeamName(tm.id)}</div>
     <div class="team-meta">${t('teamMeta', tm.group, tm.confederation, tm.fifaRank)}</div>
@@ -255,9 +346,32 @@ function renderTeamDetail() {
     <div class="chart-container"><canvas id="atk-chart"></canvas></div>
 
     <div class="path-title" style="margin-top:16px">${t('pathToFinal')}</div>
-    ${stagesHtml}`;
+    ${stagesHtml}
+
+    <div class="sankey-section">
+      <div class="sankey-section-header">
+        <span class="path-title">${t('sankeyTitle')}</span>
+        <button class="btn-secondary btn-sm" id="sankey-toggle">
+          ${state.sankeyVisible ? t('sankeyHide') : t('sankeyToggle')}
+        </button>
+      </div>
+      ${state.sankeyVisible ? sankeyBodyHtml : ''}
+    </div>`;
 
   createAttackDefenseChart('atk-chart', groupTeams);
+
+  document.getElementById('sankey-toggle')?.addEventListener('click', () => {
+    state.sankeyVisible = !state.sankeyVisible;
+    renderTeamDetail();
+  });
+
+  if (state.sankeyVisible && pr) {
+    document.getElementById('sankey-compare-sel')?.addEventListener('change', (e) => {
+      state.compareTeamId = e.target.value || null;
+      renderSankeySection();
+    });
+    renderSankeySection();
+  }
 }
 
 function initTeamsView() {
