@@ -453,10 +453,65 @@ a { color: var(--accent); }
 .champion-flag { margin-bottom: 6px; }
 .champion-flag .flag-img { height: 30px; }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   SANKEY FLOW DIAGRAM
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+
+.sankey-section { margin-top: 18px; }
+.sankey-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sankey-controls {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.sankey-compare-lbl { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.sankey-select {
+  flex: 1; padding: 5px 8px; font-size: 12px;
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  cursor: pointer;
+}
+.sankey-select:focus { outline: none; border-color: var(--accent); }
+.sankey-no-sim { font-size: 13px; color: var(--muted); padding: 8px 0; }
+
+#sankey-canvas-wrap { width: 100%; }
+
+.sankey-compare-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.sankey-half { min-width: 0; }
+
+/* SVG elements */
+.sankey-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.sankey-ribbon { transition: opacity 0.15s; }
+.sankey-ribbon:hover { opacity: 0.55 !important; }
+.sankey-node { transition: opacity 0.15s; }
+.sankey-node:hover { opacity: 0.8; }
+
+.sankey-stage-label {
+  font-size: 10px; fill: var(--muted);
+  font-family: inherit; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.sankey-prob-label {
+  font-size: 11px; font-family: inherit; font-weight: 700;
+}
+.sankey-elim-label {
+  font-size: 9px; fill: #64748b; font-family: inherit;
+}
+.sankey-team-label {
+  font-size: 11px; fill: var(--muted); font-family: inherit; font-weight: 600;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .teams-layout    { grid-template-columns: 1fr; }
   .teams-right     { position: static; max-height: none; }
   .scenario-layout { grid-template-columns: 1fr; }
   .match-detail-inner { grid-template-columns: 1fr; }
+  .sankey-compare-row { grid-template-columns: 1fr; }
 }

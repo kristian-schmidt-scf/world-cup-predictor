@@ -127,6 +127,25 @@ const STRINGS = {
     thFinalBaseScen:  'Final base → scen',
     thWinnerBaseScen: 'Winner base → scen',
 
+    // Sankey flow diagram
+    sankeyTitle:      'Tournament Flow',
+    sankeyToggle:     'Show Flow Diagram',
+    sankeyHide:       'Hide Flow Diagram',
+    sankeyCompare:    'Compare with team…',
+    sankeyNoSim:      'Run a simulation first',
+    sankeyStageStart: 'Start',
+    sankeyStageGroup: 'Groups',
+    sankeyStageR32:   'R32',
+    sankeyStageR16:   'R16',
+    sankeyStageQF:    'QF',
+    sankeyStageSF:    'SF',
+    sankeyStageFinal: 'Final',
+    sankeyStageWin:   'Champion',
+    sankeyClickGroup: (g) => `View Group ${g} matches`,
+    sankeyClickKO:    'View bracket',
+    sankeyCompareLabel: (a, b) => `${a} vs ${b}`,
+    sankeyCompareNone:  '— none —',
+
     // Status badges
     badgeUpcoming: 'Upcoming',
     badgeLive:     'LIVE',
@@ -272,6 +291,25 @@ const STRINGS = {
     thR16BaseScen:    'R16 Basis → Sz.',
     thFinalBaseScen:  'Finale Basis → Sz.',
     thWinnerBaseScen: 'Sieger Basis → Sz.',
+
+    // Sankey flow diagram
+    sankeyTitle:      'Turnierverlauf',
+    sankeyToggle:     'Flussdiagramm anzeigen',
+    sankeyHide:       'Flussdiagramm ausblenden',
+    sankeyCompare:    'Vergleich mit Team…',
+    sankeyNoSim:      'Erst eine Simulation starten',
+    sankeyStageStart: 'Start',
+    sankeyStageGroup: 'Gruppen',
+    sankeyStageR32:   'R32',
+    sankeyStageR16:   'R16',
+    sankeyStageQF:    'VF',
+    sankeyStageSF:    'HF',
+    sankeyStageFinal: 'Finale',
+    sankeyStageWin:   'Sieger',
+    sankeyClickGroup: (g) => `Gruppe ${g} Spiele ansehen`,
+    sankeyClickKO:    'Bracket ansehen',
+    sankeyCompareLabel: (a, b) => `${a} vs. ${b}`,
+    sankeyCompareNone:  '— keiner —',
 
     // Status badges
     badgeUpcoming: 'Geplant',
