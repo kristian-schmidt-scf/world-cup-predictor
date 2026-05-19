@@ -80,4 +80,67 @@ export function createScoreHistogram(canvasId, topScores) {
   });
 }
 
+const HM_N = 7; // display goals 0–6
+
+export function createScoreHeatmap(containerId, scoreMatrix, opts = {}) {
+  const container = document.getElementById(containerId);
+  if (!container || !scoreMatrix) return;
+
+  const {
+    homeLabel = 'Home goals',
+    awayLabel = 'Away goals',
+    winLabel  = 'Win',
+    drawLabel = 'Draw',
+    lossLabel = 'Loss',
+  } = opts;
+
+  let maxProb = 0, bestI = 0, bestJ = 0;
+  for (let i = 0; i < HM_N; i++)
+    for (let j = 0; j < HM_N; j++) {
+      const p = scoreMatrix[i]?.[j] ?? 0;
+      if (p > maxProb) { maxProb = p; bestI = i; bestJ = j; }
+    }
+
+  let pWin = 0, pDraw = 0, pLoss = 0;
+  for (let i = 0; i < scoreMatrix.length; i++)
+    for (let j = 0; j < (scoreMatrix[i]?.length ?? 0); j++) {
+      const p = scoreMatrix[i][j];
+      if (i > j) pWin += p;
+      else if (i === j) pDraw += p;
+      else pLoss += p;
+    }
+
+  let html = `<div class="hm-grid">`;
+  html += `<div class="hm-corner"></div>`;
+  for (let j = 0; j < HM_N; j++)
+    html += `<div class="hm-col-hdr">${j}</div>`;
+
+  for (let i = 0; i < HM_N; i++) {
+    html += `<div class="hm-row-hdr">${i}</div>`;
+    for (let j = 0; j < HM_N; j++) {
+      const p = scoreMatrix[i]?.[j] ?? 0;
+      const opacity = maxProb > 0 ? (0.08 + 0.92 * Math.sqrt(p / maxProb)) : 0.08;
+      const cls = i > j ? 'hm-win' : i === j ? 'hm-draw' : 'hm-loss';
+      const best = (i === bestI && j === bestJ) ? ' hm-best' : '';
+      const label = p >= 0.003 ? (p * 100).toFixed(1) : '';
+      html += `<div class="hm-cell ${cls}${best}" style="opacity:${opacity.toFixed(3)}" title="${i}–${j}: ${(p*100).toFixed(2)}%">` +
+        (label ? `<span class="hm-pct">${label}</span>` : '') +
+        `</div>`;
+    }
+  }
+
+  html += `</div>`;
+  html += `<div class="hm-axis">
+    <span>↑ ${homeLabel}</span>
+    <span>${awayLabel} →</span>
+  </div>`;
+  html += `<div class="hm-summary">
+    <span class="hm-s-win">${(pWin*100).toFixed(1)}% ${winLabel}</span>
+    <span class="hm-s-draw">${(pDraw*100).toFixed(1)}% ${drawLabel}</span>
+    <span class="hm-s-loss">${(pLoss*100).toFixed(1)}% ${lossLabel}</span>
+  </div>`;
+
+  container.innerHTML = html;
+}
+
 export function destroyChart(id) { destroy(id); }
