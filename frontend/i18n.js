@@ -127,6 +127,26 @@ const STRINGS = {
     thFinalBaseScen:  'Final base → scen',
     thWinnerBaseScen: 'Winner base → scen',
 
+    // Groups of Death tab
+    tabGroups:        'Groups',
+    groupsTitle:      'Group of Death Rankings',
+    groupsMethod:     'ⓘ Methodology',
+    groupsMethodTip:  'Composite score = 60% normalised average Elo strength + 40% Elo competitive balance (1 − spread/max Elo). Higher score = tougher and more evenly matched group.',
+    godBadge:         'Group of Death',
+    gcScore:          'Score',
+    gcStrength:       'Strength',
+    gcBalance:        'Balance',
+    gcSpread:         (n) => `${n} spread`,
+    gcAvgElo:         (n) => `avg Elo ${n}`,
+    gcBreakdown:      'Breakdown',
+    gcLikelyQual:     'Most likely qualifiers',
+    gcUpsetRisk:      'Upset risk (top-2 seeds)',
+    gcWinnerPts:      'Avg winner points',
+    gc3rdChance:      '3rd-place qual chance',
+    gcCloseMatches:   (n) => `${n} close match${n !== 1 ? 'es' : ''}`,
+    gcNoSim:          'Run a simulation to see qualification odds',
+    gcAvgMarket:      (n) => `€${n}M avg`,
+
     // Shareable scenario URLs
     copyLink:       'Copy Link',
     shareScenario:  'Share',
@@ -298,6 +318,26 @@ const STRINGS = {
     thR16BaseScen:    'R16 Basis → Sz.',
     thFinalBaseScen:  'Finale Basis → Sz.',
     thWinnerBaseScen: 'Sieger Basis → Sz.',
+
+    // Groups of Death tab
+    tabGroups:        'Gruppen',
+    groupsTitle:      'Todesgruppen-Ranking',
+    groupsMethod:     'ⓘ Methodik',
+    groupsMethodTip:  'Punktzahl = 60% normalisierter Elo-Durchschnitt + 40% Elo-Ausgeglichenheit (1 − Spread/Max-Elo). Höher = stärker und ausgeglichener.',
+    godBadge:         'Todesgruppe',
+    gcScore:          'Wert',
+    gcStrength:       'Stärke',
+    gcBalance:        'Ausgegl.',
+    gcSpread:         (n) => `${n} Spread`,
+    gcAvgElo:         (n) => `Elo Ø ${n}`,
+    gcBreakdown:      'Details',
+    gcLikelyQual:     'Wahrsch. Qualifikanten',
+    gcUpsetRisk:      'Überraschungsrisiko (Top-2)',
+    gcWinnerPts:      'Ø Punkte Gruppensieger',
+    gc3rdChance:      'Drittplatzierter: Qualichance',
+    gcCloseMatches:   (n) => `${n} knappes Spiel${n !== 1 ? 'e' : ''}`,
+    gcNoSim:          'Simulation starten um Qualifikationsquoten zu sehen',
+    gcAvgMarket:      (n) => `€${n}M Ø`,
 
     // Shareable scenario URLs
     copyLink:       'Link kopieren',
