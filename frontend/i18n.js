@@ -161,6 +161,18 @@ const STRINGS = {
     copyFailed:     'Failed',
     shareNoLocks:   'No locks',
 
+    // Upset detector
+    upsetBadge:      'UPSET',
+    upsetFavored:    pct => `${pct}% favourite`,
+    upsetImpact:     'Title odds shift',
+    upsetMag:        pct => `Magnitude: ${pct}%`,
+    upsetFeedTitle:  'Upsets of the Tournament',
+    chaosScore:      'Chaos Score',
+    chaosLow:        'Low chaos',
+    chaosMedium:     'Moderate chaos',
+    chaosHigh:       'High chaos',
+    chaosChaotic:    'Total chaos',
+
     // Sankey flow diagram
     sankeyTitle:      'Tournament Flow',
     sankeyToggle:     'Show Flow Diagram',
@@ -359,6 +371,18 @@ const STRINGS = {
     copied:         'Kopiert!',
     copyFailed:     'Fehler',
     shareNoLocks:   'Keine Spiele',
+
+    // Upset detector
+    upsetBadge:      'ÜBERRASCHUNG',
+    upsetFavored:    pct => `Favorit mit ${pct}%`,
+    upsetImpact:     'Titelchancen-Änderung',
+    upsetMag:        pct => `Stärke: ${pct}%`,
+    upsetFeedTitle:  'Überraschungen des Turniers',
+    chaosScore:      'Chaos-Wert',
+    chaosLow:        'Wenig Chaos',
+    chaosMedium:     'Moderates Chaos',
+    chaosHigh:       'Hohes Chaos',
+    chaosChaotic:    'Totales Chaos',
 
     // Sankey flow diagram
     sankeyTitle:      'Turnierverlauf',

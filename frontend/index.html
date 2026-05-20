@@ -168,9 +168,21 @@
         </div>
 
       </div>
-    </div>
 
+      <!-- Upsets feed (below scenario layout) -->
+      <div id="upsets-section" class="upsets-section" style="display:none">
+        <div class="upsets-header">
+          <h3 data-i18n="upsetFeedTitle">Upsets of the Tournament</h3>
+          <span class="chaos-score" id="chaos-score-display"></span>
+        </div>
+        <div id="upsets-feed"></div>
+      </div>
+
+    </div>
   </main>
+
+  <!-- Upset toast notification -->
+  <div id="upset-toast" class="upset-toast" aria-live="polite"></div>
 
   <script type="module" src="app.js"></script>
 </body>

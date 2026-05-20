@@ -39,6 +39,8 @@ const state = {
   simMeta:        null,
   scenarioResults: null,
   lockedResults:  {},   // real match results persisted on server { matchKey: { goalsA, goalsB } }
+  upsets:         [],   // upset records in reverse-chronological order
+  chaosScore:     0,    // cumulative upset magnitude
   scenarioLocks:  {},   // hypothetical scenario locks (Scenario Explorer only)
   selectedTeamId: null,
   compareTeamId:  null,   // second team for Sankey comparison
@@ -723,6 +725,18 @@ function buildH2HHtml(f, pred) {
 
 // Called after any real result is locked or unlocked — re-sims and refreshes all views.
 async function afterResultChange(results) {
+  // detect newly locked match key (present in results but absent/changed in current state)
+  const newlyLockedKey = Object.keys(results).find(k => {
+    const prev = state.lockedResults[k];
+    const next = results[k];
+    return !prev || prev.goalsA !== next.goalsA || prev.goalsB !== next.goalsB;
+  }) ?? null;
+
+  // snapshot title probabilities before re-simulation
+  const prevProbs = state.simResults?.probs
+    ? Object.fromEntries(Object.entries(state.simResults.probs).map(([id, p]) => [id, { ...p }]))
+    : null;
+
   state.lockedResults = results;
   await renderMatchesGroup(state.matchGroup);
   setSimStatus(t('statusUpdating'));
@@ -736,9 +750,138 @@ async function afterResultChange(results) {
     if (state.selectedTeamId) renderTeamDetail();
     renderGroupStandings(state.matchGroup);
     if (document.getElementById('tab-bracket').classList.contains('active')) renderBracket();
+
+    if (newlyLockedKey && prevProbs) {
+      processUpset(newlyLockedKey, results[newlyLockedKey], prevProbs);
+    }
   } catch {
     setSimStatus(t('statusFailed'));
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// UPSET DETECTOR
+// ════════════════════════════════════════════════════════════════════════════
+
+const UPSET_THRESHOLD = 0.40; // winner had < 40% win probability
+
+function processUpset(lockedKey, result, prevProbs) {
+  const f = state.fixtures.find(fix => matchKey(fix) === lockedKey);
+  if (!f) return;
+
+  const { goalsA, goalsB } = result;
+  if (goalsA === goalsB) return; // draws have no winner
+
+  const homeWon  = goalsA > goalsB;
+  const winner   = homeWon ? f.home : f.away;
+  const loser    = homeWon ? f.away : f.home;
+  const pred     = state.matchCache[`${f.home}-${f.away}`];
+  if (!pred) return;
+
+  const pWin = homeWon ? pred.pWin : pred.pLoss;
+  if (pWin >= UPSET_THRESHOLD) return; // not an upset
+
+  const magnitude = +(1 - pWin).toFixed(3);
+
+  // top 5 movers by absolute change in title win probability
+  const newProbs = state.simResults.probs;
+  const movers = Object.keys(newProbs)
+    .map(id => {
+      const before = (prevProbs[id]?.winner ?? 0) * 100;
+      const after  = (newProbs[id]?.winner ?? 0) * 100;
+      return { teamId: id, before, after, delta: after - before };
+    })
+    .filter(m => Math.abs(m.delta) >= 0.1)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 5);
+
+  const upsetRecord = {
+    fixture: f,
+    winner,
+    loser,
+    goalsWinner: homeWon ? goalsA : goalsB,
+    goalsLoser:  homeWon ? goalsB : goalsA,
+    pWin,
+    magnitude,
+    movers,
+  };
+
+  state.upsets.unshift(upsetRecord);
+  state.chaosScore = +((state.chaosScore + magnitude).toFixed(3));
+
+  showUpsetToast(upsetRecord);
+  renderUpsetsFeed();
+}
+
+let upsetToastTimer = null;
+
+function showUpsetToast(upset) {
+  const toast = document.getElementById('upset-toast');
+  if (!toast) return;
+
+  const top3 = upset.movers.slice(0, 3);
+  const moversHtml = top3.map(m => {
+    const arrow = m.delta > 0 ? '↑' : '↓';
+    const cls   = m.delta > 0 ? 'ut-up' : 'ut-down';
+    return `<div class="ut-mover ${cls}">${flag(m.teamId)} ${m.teamId} ${arrow}${Math.abs(m.delta).toFixed(1)}pp</div>`;
+  }).join('');
+
+  toast.innerHTML = `
+    <div class="ut-header">
+      <span class="ut-badge" data-i18n="upsetBadge">${t('upsetBadge')}</span>
+      <button class="ut-close" onclick="document.getElementById('upset-toast').classList.remove('ut-visible')">×</button>
+    </div>
+    <div class="ut-result">${flag(upset.winner)} <strong>${upset.winner}</strong> ${upset.goalsWinner}–${upset.goalsLoser} <strong>${upset.loser}</strong> ${flag(upset.loser)}</div>
+    <div class="ut-prob">${t('upsetFavored', (upset.pWin * 100).toFixed(0))}</div>
+    ${moversHtml ? `<div class="ut-movers-label">${t('upsetImpact')}</div>${moversHtml}` : ''}
+  `;
+
+  toast.classList.add('ut-visible');
+  if (upsetToastTimer) clearTimeout(upsetToastTimer);
+  upsetToastTimer = setTimeout(() => toast.classList.remove('ut-visible'), 9000);
+}
+
+function chaosLabel(score) {
+  if (score < 1.5) return t('chaosLow');
+  if (score < 3.0) return t('chaosMedium');
+  if (score < 5.0) return t('chaosHigh');
+  return t('chaosChaotic');
+}
+
+function renderUpsetsFeed() {
+  const section = document.getElementById('upsets-section');
+  const feed    = document.getElementById('upsets-feed');
+  const display = document.getElementById('chaos-score-display');
+  if (!section || !feed) return;
+
+  if (state.upsets.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+  if (display) {
+    display.textContent = `${t('chaosScore')}: ${state.chaosScore.toFixed(2)} — ${chaosLabel(state.chaosScore)}`;
+  }
+
+  feed.innerHTML = state.upsets.map(u => {
+    const moversHtml = u.movers.slice(0, 3).map(m => {
+      const arrow = m.delta > 0 ? '↑' : '↓';
+      const cls   = m.delta > 0 ? 'uf-up' : 'uf-down';
+      return `<span class="uf-mover ${cls}">${flag(m.teamId)} ${m.teamId} ${m.before.toFixed(1)}%→${m.after.toFixed(1)}% (${arrow}${Math.abs(m.delta).toFixed(1)}pp)</span>`;
+    }).join('');
+
+    return `
+      <div class="uf-card">
+        <div class="uf-card-header">
+          <span class="uf-badge">${t('upsetBadge')}</span>
+          <span class="uf-result">${flag(u.winner)} <strong>${u.winner}</strong> ${u.goalsWinner}–${u.goalsLoser} <strong>${u.loser}</strong> ${flag(u.loser)}</span>
+          <span class="uf-prob">${t('upsetFavored', (u.pWin * 100).toFixed(0))}</span>
+          <span class="uf-mag">${t('upsetMag', (u.magnitude * 100).toFixed(0))}</span>
+        </div>
+        ${moversHtml ? `<div class="uf-movers">${t('upsetImpact')}: ${moversHtml}</div>` : ''}
+      </div>`;
+  }).join('');
 }
 
 let countdownTimer = null;
