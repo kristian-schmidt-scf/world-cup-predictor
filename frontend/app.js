@@ -41,6 +41,10 @@ const state = {
   lockedResults:  {},   // real match results persisted on server { matchKey: { goalsA, goalsB } }
   upsets:         [],   // upset records in reverse-chronological order
   chaosScore:     0,    // cumulative upset magnitude
+  histFilters:    { team: '', opponent: '', tournament: 'all', yearFrom: '', yearTo: '', result: 'all' },
+  histPage:       1,
+  histData:       null,
+  histCurated:    null,
   scenarioLocks:  {},   // hypothetical scenario locks (Scenario Explorer only)
   selectedTeamId: null,
   compareTeamId:  null,   // second team for Sankey comparison
@@ -149,6 +153,7 @@ function switchTab(tab) {
   document.querySelector(`.tab-btn[data-tab="${tab}"]`)?.classList.add('active');
   if (tab === 'bracket') renderBracket();
   if (tab === 'groups')  renderGroupsTab();
+  if (tab === 'history') renderHistoryTab();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1707,6 +1712,249 @@ function initScenarioView() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// HISTORY TAB
+// ════════════════════════════════════════════════════════════════════════════
+
+function matchTournCat(tournament) {
+  const s = tournament.toLowerCase();
+  if (s === 'fifa world cup') return 'wc';
+  if (s.includes('world cup qual') || s.includes('qualification')) return 'qual';
+  if (s.includes('friendly')) return 'friendly';
+  return 'other';
+}
+
+async function fetchHistory() {
+  const p = new URLSearchParams();
+  const f = state.histFilters;
+  if (f.team)                  p.set('team', f.team);
+  if (f.opponent)              p.set('opponent', f.opponent);
+  if (f.tournament !== 'all')  p.set('tournament', f.tournament);
+  if (f.yearFrom)              p.set('year_from', f.yearFrom);
+  if (f.yearTo)                p.set('year_to', f.yearTo);
+  if (f.result !== 'all')      p.set('result', f.result);
+  p.set('page', state.histPage);
+  const res = await fetch(`/api/history?${p}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function renderHistoryStatsBar(stats) {
+  const el = document.getElementById('history-stats-bar');
+  if (!el || !stats) return;
+  el.innerHTML = t('histStats', stats.total, stats.dateFrom, stats.dateTo, stats.wcMatches);
+}
+
+function buildHistoryTable(matches) {
+  const rows = matches.map(m => {
+    const cat  = matchTournCat(m.tournament);
+    const catLabel = { wc: t('histBadgeWC'), qual: t('histBadgeQual'), friendly: t('histBadgeFriendly'), other: t('histBadgeOther') }[cat] ?? '';
+    return `<tr>
+      <td class="hist-td-date">${m.date}</td>
+      <td>${flag(m.home)} ${m.home}</td>
+      <td class="hist-score">${m.homeGoals}–${m.awayGoals}</td>
+      <td>${flag(m.away)} ${m.away}</td>
+      <td><span class="hist-badge hist-badge--${cat}">${catLabel}</span> <span class="hist-tourn-name">${m.tournament}</span></td>
+    </tr>`;
+  }).join('');
+
+  return `<table class="data-table hist-table">
+    <thead><tr>
+      <th>${t('histThDate')}</th>
+      <th>${t('histThHome')}</th>
+      <th>${t('histThScore')}</th>
+      <th>${t('histThAway')}</th>
+      <th>${t('histThTournament')}</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function buildHistoryPagination(page, totalPages) {
+  if (totalPages <= 1) return '';
+  const prev  = page > 1 ? `<button class="hist-page-btn" data-page="${page - 1}">←</button>` : `<button class="hist-page-btn" disabled>←</button>`;
+  const next  = page < totalPages ? `<button class="hist-page-btn" data-page="${page + 1}">→</button>` : `<button class="hist-page-btn" disabled>→</button>`;
+  const start = Math.max(1, page - 3);
+  const end   = Math.min(totalPages, start + 6);
+  const nums  = [];
+  for (let p = start; p <= end; p++)
+    nums.push(`<button class="hist-page-btn${p === page ? ' active' : ''}" data-page="${p}">${p}</button>`);
+  return `<div class="hist-pagination">${prev}${nums.join('')}${next}<span class="hist-page-info">${t('histPage', page, totalPages)}</span></div>`;
+}
+
+async function renderHistoryResults() {
+  const tableWrap = document.getElementById('history-table-wrap');
+  const pagEl     = document.getElementById('history-pagination');
+  if (!tableWrap) return;
+
+  tableWrap.innerHTML = `<div style="padding:20px;color:var(--muted)">${t('loading')}</div>`;
+  if (pagEl) pagEl.innerHTML = '';
+
+  try {
+    const data = await fetchHistory();
+    state.histData = data;
+    renderHistoryStatsBar(data.stats);
+
+    if (!data.matches.length) {
+      tableWrap.innerHTML = `<div class="empty-state"><p>${t('histNoResults')}</p></div>`;
+      return;
+    }
+    tableWrap.innerHTML = `<div class="table-wrap">${buildHistoryTable(data.matches)}</div>`;
+    if (pagEl) pagEl.innerHTML = buildHistoryPagination(data.page, data.totalPages);
+  } catch {
+    tableWrap.innerHTML = `<div class="empty-state"><p>${t('statusFailed')}</p></div>`;
+  }
+}
+
+async function renderHistoryCurated() {
+  const el = document.getElementById('history-curated');
+  if (!el) return;
+  try {
+    if (!state.histCurated) {
+      const res = await fetch('/api/history/curated');
+      if (!res.ok) return;
+      state.histCurated = await res.json();
+    }
+    const { highestScoring, biggestUpsets } = state.histCurated;
+
+    const highRows = highestScoring.map(m => `
+      <div class="hist-curated-row">
+        <span class="hist-curated-year">${m.date.slice(0, 4)}</span>
+        <span>${flag(m.home)} ${m.home} <strong>${m.homeGoals}–${m.awayGoals}</strong> ${flag(m.away)} ${m.away}</span>
+        <span class="hist-curated-meta">${m.homeGoals + m.awayGoals} ${t('histGoals')}</span>
+      </div>`).join('');
+
+    const upsetRows = biggestUpsets.map(m => `
+      <div class="hist-curated-row">
+        <span class="hist-curated-year">${m.date.slice(0, 4)}</span>
+        <span>${flag(m.home)} ${m.home} <strong>${m.homeGoals}–${m.awayGoals}</strong> ${flag(m.away)} ${m.away}</span>
+        <span class="hist-curated-meta">+${Math.round(m.eloDiff)} Elo</span>
+      </div>`).join('');
+
+    el.innerHTML = `
+      <h3 class="hist-curated-title">${t('histCuratedTitle')}</h3>
+      <div class="hist-curated-grid">
+        <div class="hist-curated-section">
+          <div class="hist-curated-subtitle">${t('histHighScoring')}</div>
+          ${highRows}
+        </div>
+        <div class="hist-curated-section">
+          <div class="hist-curated-subtitle">${t('histBiggestUpsets')}</div>
+          ${upsetRows}
+        </div>
+      </div>`;
+  } catch { /* curated is optional */ }
+}
+
+async function exportHistoryCsv() {
+  const btn = document.getElementById('hist-export');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const p = new URLSearchParams();
+    const f = state.histFilters;
+    if (f.team)               p.set('team', f.team);
+    if (f.opponent)           p.set('opponent', f.opponent);
+    if (f.tournament !== 'all') p.set('tournament', f.tournament);
+    if (f.yearFrom)           p.set('year_from', f.yearFrom);
+    if (f.yearTo)             p.set('year_to', f.yearTo);
+    if (f.result !== 'all')   p.set('result', f.result);
+    p.set('page_size', 'all');
+    const res  = await fetch(`/api/history?${p}`);
+    const data = await res.json();
+    const header = 'date,home,home_goals,away_goals,away,tournament';
+    const rows   = data.matches.map(m =>
+      `${m.date},${m.home},${m.homeGoals},${m.awayGoals},${m.away},"${m.tournament}"`
+    );
+    const csv  = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: 'wc2026_history.csv' });
+    a.click();
+    URL.revokeObjectURL(url);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('histExportCsv'); }
+  }
+}
+
+async function renderHistoryTab() {
+  await renderHistoryResults();
+  renderHistoryCurated();
+}
+
+function initHistoryView() {
+  const filtersEl = document.getElementById('history-filters');
+  if (!filtersEl) return;
+
+  const sorted = [...state.teams].sort((a, b) => a.id.localeCompare(b.id));
+  const teamOpts = sorted.map(tm => `<option value="${tm.id}">${tm.id}</option>`).join('');
+
+  filtersEl.innerHTML = `
+    <select id="hist-team" class="hist-select">
+      <option value="">${t('histFilterTeamAll')}</option>
+      ${teamOpts}
+    </select>
+    <span class="hist-vs">vs.</span>
+    <select id="hist-opponent" class="hist-select">
+      <option value="">${t('histFilterOppAll')}</option>
+      ${teamOpts}
+    </select>
+    <select id="hist-tournament" class="hist-select">
+      <option value="all">${t('histTournAll')}</option>
+      <option value="wc">${t('histTournWC')}</option>
+      <option value="qual">${t('histTournQual')}</option>
+      <option value="friendly">${t('histTournFriendly')}</option>
+      <option value="other">${t('histTournOther')}</option>
+    </select>
+    <input type="number" id="hist-year-from" class="hist-input" placeholder="${t('histYearFrom')}" min="1872" max="2026">
+    <span class="hist-vs">–</span>
+    <input type="number" id="hist-year-to"   class="hist-input" placeholder="${t('histYearTo')}"   min="1872" max="2026">
+    <select id="hist-result" class="hist-select">
+      <option value="all">${t('histResultAll')}</option>
+      <option value="W">${t('histResultW')}</option>
+      <option value="D">${t('histResultD')}</option>
+      <option value="L">${t('histResultL')}</option>
+    </select>
+    <button class="btn-primary btn-sm" id="hist-apply">${t('histApply')}</button>
+    <button class="btn-secondary btn-sm" id="hist-reset">${t('histReset')}</button>
+    <button class="btn-secondary btn-sm" id="hist-export">${t('histExportCsv')}</button>
+  `;
+
+  document.getElementById('hist-apply').addEventListener('click', () => {
+    state.histFilters = {
+      team:       document.getElementById('hist-team').value,
+      opponent:   document.getElementById('hist-opponent').value,
+      tournament: document.getElementById('hist-tournament').value,
+      yearFrom:   document.getElementById('hist-year-from').value,
+      yearTo:     document.getElementById('hist-year-to').value,
+      result:     document.getElementById('hist-result').value,
+    };
+    state.histPage = 1;
+    renderHistoryResults();
+  });
+
+  document.getElementById('hist-reset').addEventListener('click', () => {
+    state.histFilters = { team: '', opponent: '', tournament: 'all', yearFrom: '', yearTo: '', result: 'all' };
+    state.histPage = 1;
+    document.getElementById('hist-team').value       = '';
+    document.getElementById('hist-opponent').value   = '';
+    document.getElementById('hist-tournament').value = 'all';
+    document.getElementById('hist-year-from').value  = '';
+    document.getElementById('hist-year-to').value    = '';
+    document.getElementById('hist-result').value     = 'all';
+    renderHistoryResults();
+  });
+
+  document.getElementById('hist-export').addEventListener('click', exportHistoryCsv);
+
+  document.getElementById('history-pagination')?.addEventListener('click', e => {
+    const btn = e.target.closest('.hist-page-btn[data-page]');
+    if (!btn || btn.disabled) return;
+    state.histPage = parseInt(btn.dataset.page, 10);
+    renderHistoryResults();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // I18N HELPERS
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -1772,6 +2020,7 @@ async function init() {
     initGroupsTab();
     initBracketView();
     initScenarioView();
+    initHistoryView();
     renderTeamsTable();
 
     // Auto-navigate to Scenario tab and correct group if URL had locks

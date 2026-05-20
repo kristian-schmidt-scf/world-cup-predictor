@@ -718,6 +718,88 @@ details[open] .gc-summary::after { content: ' ▴'; }
   font-size: 11px; fill: var(--muted); font-family: inherit; font-weight: 600;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   HISTORY TAB
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.history-layout { padding: 4px 0; }
+
+.history-toolbar {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding: 16px 0 10px;
+}
+.history-toolbar h2 { margin: 0; }
+.history-stats-bar {
+  font-size: 12px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 3px 12px;
+}
+
+.history-filters {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 14px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+}
+.hist-select {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 8px; font-size: 12px; cursor: pointer;
+}
+.hist-select:focus { outline: none; border-color: var(--accent); }
+.hist-input {
+  width: 80px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
+  font-size: 12px; font-family: inherit;
+}
+.hist-input:focus { outline: none; border-color: var(--accent); }
+.hist-vs { color: var(--muted); font-size: 12px; }
+
+.hist-table td { font-size: 13px; }
+.hist-td-date { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hist-score { font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hist-tourn-name { font-size: 11px; color: var(--muted); }
+
+.hist-badge {
+  display: inline-block; font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+  border-radius: 3px; padding: 1px 5px; vertical-align: middle; flex-shrink: 0;
+}
+.hist-badge--wc       { background: rgba(59,130,246,.2);  color: #60a5fa; border: 1px solid rgba(59,130,246,.35); }
+.hist-badge--qual     { background: rgba(245,158,11,.2);  color: #fbbf24; border: 1px solid rgba(245,158,11,.35); }
+.hist-badge--friendly { background: rgba(148,163,184,.1); color: var(--muted); border: 1px solid var(--border); }
+.hist-badge--other    { background: rgba(148,163,184,.1); color: var(--muted); border: 1px solid var(--border); }
+
+.hist-pagination {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  margin: 14px 0;
+}
+.hist-page-btn {
+  min-width: 32px; height: 32px; padding: 0 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; font-size: 13px;
+  cursor: pointer; transition: background 0.12s, border-color 0.12s;
+}
+.hist-page-btn:hover:not([disabled]) { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hist-page-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.hist-page-btn[disabled] { opacity: 0.35; cursor: default; }
+.hist-page-info { font-size: 11px; color: var(--muted); margin-left: 8px; }
+
+.history-curated { margin-top: 28px; border-top: 1px solid var(--border); padding-top: 20px; }
+.hist-curated-title { font-size: 16px; font-weight: 700; margin: 0 0 14px; }
+.hist-curated-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+}
+.hist-curated-subtitle {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); margin-bottom: 10px;
+}
+.hist-curated-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.hist-curated-row:last-child { border-bottom: none; }
+.hist-curated-year { font-size: 11px; color: var(--muted); width: 32px; flex-shrink: 0; }
+.hist-curated-meta { font-size: 11px; color: var(--accent); margin-left: auto; white-space: nowrap; }
+
 /* ── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .teams-layout    { grid-template-columns: 1fr; }
@@ -725,4 +807,5 @@ details[open] .gc-summary::after { content: ' ▴'; }
   .scenario-layout { grid-template-columns: 1fr; }
   .match-detail-inner { grid-template-columns: 1fr; }
   .sankey-compare-row { grid-template-columns: 1fr; }
+  .hist-curated-grid  { grid-template-columns: 1fr; }
 }
