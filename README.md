@@ -5,12 +5,17 @@ An interactive web tool for predicting FIFA World Cup 2026 outcomes using hierar
 ## Features
 
 - **Match predictions** — Expected goals, score probability matrix, and win/draw/loss probabilities for every fixture
+- **Score probability heatmap** — 7×7 colour-coded heatmap (goals 0–6) in the match detail panel; blue = home win, amber = draw, red = away win; toggle to bar chart view
 - **Head-to-head overlay** — All-time historical record between any two teams pulled from the full martj42 dataset, shown in the match detail panel
 - **Team ratings** — Attack (α) and defense (δ) strength parameters calibrated against 7,000+ historical international results
 - **Four data signals** — Elo ratings, recent form, squad market value, and average squad age all feed the model prior
 - **Tournament simulation** — 10,000 Monte Carlo simulations produce advancement probabilities at every stage (R16 → QF → SF → Final → Winner)
 - **Bracket explorer** — Visual bracket with probability overlays; locks in real results automatically
-- **Scenario simulator** — Force any group result and instantly see how knockout probabilities shift
+- **Tournament path (Sankey diagram)** — Flow diagram in the team detail panel showing probability mass at each tournament stage; compare two teams side by side
+- **Scenario simulator** — Force any group result and instantly see how knockout probabilities shift; shareable via `?s=` URL parameter
+- **Group of Death rankings** — Composite strength/competitiveness score for all 12 groups; bar charts, qualification odds, and upset risk per group
+- **Upset detector** — Flags underdog wins (< 40% pre-match probability); animated toast notification with title-odds movers; running chaos score and upsets feed in the Scenario tab
+- **History browser** — Filterable archive of 7,500+ historical matches between WC 2026 teams; filter by team, opponent, tournament type, year range, and result; penalty shootout annotations; CSV export; curated "Highest-Scoring" and "Biggest Upsets" sections
 - **Result locking** — Lock real match scores; they persist across page reloads and automatically seed the simulation
 - **Match countdown timers** — Live status badges count down to kick-off, pulse during live windows, and show final scores
 - **Bilingual UI (EN/DE)** — Language toggle button in the header; all labels, table headers, round names, and team names switch between English and German; preference persists across sessions
@@ -45,7 +50,8 @@ world-cup-predictor/
 │   │   ├── fixtures.js         # 104 fixtures: 72 group + 32 knockout slots (static)
 │   │   ├── fetchMatches.js     # Historical results from GitHub CSV (auto-cached)
 │   │   │                       #   fetchMatches()    — 2010+ for model fitting
-│   │   │                       #   fetchAllMatches() — full history for H2H display
+│   │   │                       #   fetchAllMatches() — full history for H2H / history tab
+│   │   │                       #   fetchShootouts()  — penalty shootout outcomes
 │   │   ├── computeElo.js       # Elo ratings computed from match history
 │   │   ├── computeForm.js      # Recent form: last 10 matches, time-decayed
 │   │   ├── computeH2H.js       # Head-to-head record between any two teams
@@ -61,13 +67,15 @@ world-cup-predictor/
 │   │   ├── teams.js            # GET /api/teams, GET /api/team/:id
 │   │   ├── matches.js          # GET /api/fixtures, GET /api/match/:teamA/:teamB
 │   │   ├── simulate.js         # POST /api/simulate, GET /api/bracket
-│   │   └── results.js          # GET/POST/DELETE /api/results (result locking)
+│   │   ├── results.js          # GET/POST/DELETE /api/results (result locking)
+│   │   └── history.js          # GET /api/history, GET /api/history/curated
 │   └── server.js               # Express server + static frontend serving
 └── frontend/
     ├── index.html
     ├── app.js
-    ├── charts.js
-    ├── i18n.js             # EN/DE string table, t(), getLang(), setLang(), teamName()
+    ├── charts.js               # Chart.js wrappers: attack/defense bar, score histogram, heatmap
+    ├── sankey.js               # Pure SVG tournament path flow diagram
+    ├── i18n.js                 # EN/DE string table, t(), getLang(), setLang(), teamName()
     └── styles.css
 ```
 
@@ -108,6 +116,8 @@ Then open `http://localhost:3001` in your browser. No API keys required.
 | POST | `/api/results` | Body: `{ matchId, goalsA, goalsB }` — lock a result |
 | DELETE | `/api/results/:matchId` | Unlock a result |
 | POST | `/api/refresh` | Invalidate all caches and re-fetch |
+| GET | `/api/history` | Filterable, paginated match archive (`team`, `opponent`, `tournament`, `year_from`, `year_to`, `result`, `page`) |
+| GET | `/api/history/curated` | Top-5 highest-scoring and biggest-upset matches |
 
 ## Sample output
 
@@ -133,6 +143,7 @@ See [project_plan.md](project_plan.md) for the full milestone plan. Tournament s
 | 2 | Modeling layer | ✅ Complete (May 15) |
 | 3 | Backend API | ✅ Complete (May 15) |
 | 4 | Frontend MVP | ✅ Complete (May 16) |
+| 4+ | Post-MVP enhancements (issues #1, #3, #7, #12, #15, #16, #19, #20, #30, #31, #32, i18n) | ✅ Complete (May 17–19) |
 | 5 | Live tournament mode | Planned (June 11+) |
 | 6 | Knockout-stage polish | Planned (July 4+) |
 

@@ -100,7 +100,7 @@ backend/models/test.js
 
 ---
 
-## Phase 3 — Backend API ✅ Complete (May 15)
+## Phase 3 — Backend API ✅ Complete (May 15, extended May 19)
 
 Goal: Express server exposing clean JSON endpoints consumed by the frontend.
 
@@ -118,6 +118,8 @@ Goal: Express server exposing clean JSON endpoints consumed by the frontend.
 | POST | `/api/results` | Lock a result: `{ matchId, goalsA, goalsB }` |
 | DELETE | `/api/results/:matchId` | Unlock a result |
 | POST | `/api/refresh` | Invalidate all caches and re-fetch |
+| GET | `/api/history` | Filterable paginated match archive (`team`, `opponent`, `tournament`, `year_from`, `year_to`, `result`, `page`, `page_size`) |
+| GET | `/api/history/curated` | Top-5 highest-scoring and biggest-upset matches (Elo-gap ranked) |
 
 ### Tasks
 - [x] Express server with CORS enabled for local frontend dev.
@@ -181,13 +183,15 @@ Goal: all four views working against the live backend.
 ```
 frontend/index.html
 frontend/app.js
-frontend/charts.js
+frontend/charts.js             (createScoreHeatmap added May 19)
+frontend/sankey.js             (pure SVG Sankey diagram, added May 17)
 frontend/styles.css
 backend/data/computeH2H.js
-backend/data/fetchMatches.js   (fetchAllMatches added)
+backend/data/fetchMatches.js   (fetchAllMatches + fetchShootouts added)
+backend/routes/history.js      (GET /api/history + /api/history/curated, added May 19)
 ```
 
-### Post-MVP enhancements (delivered May 16–17)
+### Post-MVP enhancements (delivered May 16–19)
 
 | Issue | Feature | PR |
 |-------|---------|-----|
@@ -198,6 +202,12 @@ backend/data/fetchMatches.js   (fetchAllMatches added)
 | #15 | Visual SVG knockout bracket tree with probability overlays + Tree/Table toggle | #39 |
 | #16 | Simulated group standings table (avg pts, avg GD, finish probabilities) below each group's fixtures | #42 |
 | — | Bilingual EN/DE UI with language toggle; German team names; preference persisted in localStorage | #43 |
+| #20 | Tournament path Sankey flow diagram in team detail panel; two-team comparison mode | #44 |
+| #12 | Shareable scenario URLs via `?s=` query param; Copy Link + Share buttons | #45 |
+| #32 | Group of Death rankings tab — composite strength/competitiveness scores for all 12 groups | #46 |
+| #19 | Score probability heatmap replacing top-10 bar chart; Heatmap/Bar toggle | #47 |
+| #31 | Upset detector — toast notification + tournament upsets feed + running chaos score | #48 |
+| #30 | History tab — filterable match archive (7,500+ records), curated greatest matches, CSV export, penalty shootout annotations | #49 |
 
 ---
 
@@ -217,13 +227,13 @@ Goal: real-time result ingestion once the tournament is live.
 
 - [ ] Refine penalty shootout model (per-team historical shootout win rates).
 - [ ] Calibration view: model-predicted vs. actual outcomes so far.
-- [ ] Shareable bracket URL (encode scenario as query params).
+- [x] Shareable bracket/scenario URL (encode scenario as query params) — delivered as issue #12, PR #45.
 
 ---
 
 ## Open Issues (GitHub)
 
-33 issues open covering future enhancements. Selected high-impact items:
+Selected high-impact items remaining:
 
 | # | Feature | Impact | Effort |
 |---|---------|--------|--------|
@@ -231,8 +241,11 @@ Goal: real-time result ingestion once the tournament is live.
 | 4 | Push notifications for match results | High | Medium |
 | 5 | Exportable/shareable predictions | High | Medium |
 | 6 | Social sharing cards | High | Low |
-| 8 | Per-team historical shootout data | Medium | Medium |
+| 8 | Per-team historical shootout data (replace 50/50 model) | Medium | Medium |
 | 20 | Mobile-responsive layout | High | Medium |
+| 33 | Expected goals trend chart per team | Medium | Low |
+
+Recently closed: #1, #3, #7, #12, #15, #16, #19, #20, #30, #31, #32.
 
 See GitHub Issues for the full list with detailed specs.
 
