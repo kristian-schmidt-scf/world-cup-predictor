@@ -1,6 +1,7 @@
 import { createAttackDefenseChart, createScoreHistogram, createScoreHeatmap } from './charts.js';
 import { t, getLang, setLang, teamName } from './i18n.js';
 import { drawTournamentFlow } from './sankey.js';
+import { drawShareCard } from './sharecard.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const API = '/api';
@@ -56,6 +57,7 @@ const state = {
   filter:         '',
   sort:           { col: 'elo', dir: -1 },  // dir: -1 = desc, 1 = asc
   bracketView:    'tree',
+  shareFormat:    'landscape',
 };
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -151,7 +153,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b   => b.classList.remove('active'));
   document.getElementById(`tab-${tab}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${tab}"]`)?.classList.add('active');
-  if (tab === 'bracket') renderBracket();
+  if (tab === 'bracket') { renderBracket(); renderShareSection(); }
   if (tab === 'groups')  renderGroupsTab();
   if (tab === 'history') renderHistoryTab();
 }
@@ -1279,6 +1281,89 @@ function renderBracketTable() {
   }).join('');
 }
 
+// ── Share card helpers ─────────────────────────────────────────────────────────
+
+function generateTopTeams(n) {
+  if (!state.simResults) return [];
+  return [...state.teams]
+    .map(tm => ({
+      id:   tm.id,
+      name: getTeamName(tm.id),
+      prob: teamProbs(tm.id)?.winner ?? 0,
+      iso2: FLAGS[tm.id] ?? '',
+    }))
+    .sort((a, b) => b.prob - a.prob)
+    .slice(0, n);
+}
+
+function renderShareSection() {
+  const wrap = document.getElementById('share-section');
+  if (!wrap) return;
+
+  if (!state.simResults) {
+    wrap.innerHTML = `<div class="share-no-sim"><p>${t('shareNoSim')}</p></div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <div class="share-header">
+      <h3 class="share-title">${t('shareCardTitle')}</h3>
+      <div class="share-format-toggle">
+        <button class="share-fmt-btn${state.shareFormat === 'landscape' ? ' active' : ''}" data-fmt="landscape">${t('shareFormatLandscape')}</button>
+        <button class="share-fmt-btn${state.shareFormat === 'square'    ? ' active' : ''}" data-fmt="square">${t('shareFormatSquare')}</button>
+      </div>
+    </div>
+    <div class="share-preview">
+      <canvas id="share-canvas"></canvas>
+    </div>
+    <div class="share-actions">
+      <button class="btn-primary"   id="share-x-btn">${t('shareOnX')}</button>
+      <button class="btn-secondary" id="share-copy-btn">${t('shareCopyImage')}</button>
+      <button class="btn-secondary" id="share-dl-btn">${t('shareDownload')}</button>
+    </div>`;
+
+  const canvas   = document.getElementById('share-canvas');
+  const topTeams = generateTopTeams(10);
+  drawShareCard(canvas, state.shareFormat, topTeams, { n: state.simMeta?.n ?? 10_000 });
+
+  wrap.querySelectorAll('.share-fmt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.shareFormat = btn.dataset.fmt;
+      renderShareSection();
+    });
+  });
+
+  document.getElementById('share-x-btn').addEventListener('click', () => {
+    const top3 = generateTopTeams(3)
+      .map(tm => `${tm.name} ${(tm.prob * 100).toFixed(1)}%`)
+      .join(', ');
+    const simN = (state.simMeta?.n ?? 10_000).toLocaleString();
+    const text = encodeURIComponent(`WC 2026 winner odds (${simN} sims): ${top3}`);
+    const url  = encodeURIComponent('https://wc2026predictor.com');
+    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank');
+  });
+
+  document.getElementById('share-copy-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('share-copy-btn');
+    try {
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      btn.textContent = t('copied');
+    } catch {
+      btn.textContent = t('copyFailed');
+    }
+    setTimeout(() => { btn.textContent = t('shareCopyImage'); }, 1500);
+  });
+
+  document.getElementById('share-dl-btn').addEventListener('click', () => {
+    const a = Object.assign(document.createElement('a'), {
+      href:     canvas.toDataURL('image/png'),
+      download: `wc2026-predictions-${state.shareFormat}.png`,
+    });
+    a.click();
+  });
+}
+
 function initBracketView() {
   document.getElementById('run-sim-btn').addEventListener('click', async () => {
     const btn = document.getElementById('run-sim-btn');
@@ -1292,6 +1377,7 @@ function initBracketView() {
       state.simMeta    = data.meta;
       setSimStatus(t('statusSims', data.meta.n, data.meta.elapsedMs));
       renderBracket();
+      renderShareSection();
       renderTeamsTable();
       if (state.selectedTeamId) renderTeamDetail();
     } catch (err) {
@@ -2057,7 +2143,10 @@ async function init() {
       renderTeamsTable();
       if (state.selectedTeamId) renderTeamDetail();
       renderGroupStandings(state.matchGroup);
-      if (document.getElementById('tab-bracket').classList.contains('active')) renderBracket();
+      if (document.getElementById('tab-bracket').classList.contains('active')) {
+        renderBracket();
+        renderShareSection();
+      }
       if (document.getElementById('tab-groups')?.classList.contains('active')) renderGroupsTab();
     } catch {
       setSimStatus(t('statusUnavailable'));
