@@ -1748,10 +1748,13 @@ function buildHistoryTable(matches) {
   const rows = matches.map(m => {
     const cat  = matchTournCat(m.tournament);
     const catLabel = { wc: t('histBadgeWC'), qual: t('histBadgeQual'), friendly: t('histBadgeFriendly'), other: t('histBadgeOther') }[cat] ?? '';
+    const scoreNote = m.penaltyWinner
+      ? `<span class="hist-pens">${t('histPens', m.penaltyWinner)}</span>`
+      : '';
     return `<tr>
       <td class="hist-td-date">${m.date}</td>
       <td>${flag(m.home)} ${m.home}</td>
-      <td class="hist-score">${m.homeGoals}–${m.awayGoals}</td>
+      <td class="hist-score">${m.homeGoals}–${m.awayGoals}${scoreNote}</td>
       <td>${flag(m.away)} ${m.away}</td>
       <td><span class="hist-badge hist-badge--${cat}">${catLabel}</span> <span class="hist-tourn-name">${m.tournament}</span></td>
     </tr>`;
@@ -1823,12 +1826,15 @@ async function renderHistoryCurated() {
         <span class="hist-curated-meta">${m.homeGoals + m.awayGoals} ${t('histGoals')}</span>
       </div>`).join('');
 
-    const upsetRows = biggestUpsets.map(m => `
+    const upsetRows = biggestUpsets.map(m => {
+      const pensNote = m.penaltyWinner ? ` <span class="hist-pens">${t('histPens', m.penaltyWinner)}</span>` : '';
+      return `
       <div class="hist-curated-row">
         <span class="hist-curated-year">${m.date.slice(0, 4)}</span>
-        <span>${flag(m.home)} ${m.home} <strong>${m.homeGoals}–${m.awayGoals}</strong> ${flag(m.away)} ${m.away}</span>
+        <span>${flag(m.home)} ${m.home} <strong>${m.homeGoals}–${m.awayGoals}</strong>${pensNote} ${flag(m.away)} ${m.away}</span>
         <span class="hist-curated-meta">+${Math.round(m.eloDiff)} Elo</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     el.innerHTML = `
       <h3 class="hist-curated-title">${t('histCuratedTitle')}</h3>

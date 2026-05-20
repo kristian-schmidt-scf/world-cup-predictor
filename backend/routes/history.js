@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { fetchAllMatches, fetchMatches, computeEloRatings } from '../data/index.js';
+import { fetchAllMatches, fetchMatches, fetchShootouts, computeEloRatings } from '../data/index.js';
 
 const router = Router();
 const PAGE_SIZE = 50;
@@ -16,7 +16,8 @@ function tournamentCategory(tournament) {
 // GET /api/history
 router.get('/history', async (req, res, next) => {
   try {
-    const all = (await fetchAllMatches()).filter(m => m.home && m.away);
+    const [allMatches, shootouts] = await Promise.all([fetchAllMatches(), fetchShootouts()]);
+    const all = allMatches.filter(m => m.home && m.away);
 
     const { team, opponent, tournament, year_from, year_to, result, page, page_size } = req.query;
 
@@ -54,14 +55,19 @@ router.get('/history', async (req, res, next) => {
       wcMatches: all.filter(m => tournamentCategory(m.tournament) === 'wc').length,
     };
 
-    // Export mode: return up to EXPORT_CAP rows, no pagination wrapper
+    const annotate = m => {
+      const so = shootouts.get(`${m.date}|${m.home}|${m.away}`);
+      return so ? { ...m, penaltyWinner: so.winner } : m;
+    };
+
+    // Export mode: return up to EXPORT_CAP rows without pagination wrapper
     if (page_size === 'all') {
-      return res.json({ matches: filtered.slice(0, EXPORT_CAP), total, stats });
+      return res.json({ matches: filtered.slice(0, EXPORT_CAP).map(annotate), total, stats });
     }
 
     const pageNum    = Math.max(1, parseInt(page, 10) || 1);
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const matches    = filtered.slice((pageNum - 1) * PAGE_SIZE, pageNum * PAGE_SIZE);
+    const matches    = filtered.slice((pageNum - 1) * PAGE_SIZE, pageNum * PAGE_SIZE).map(annotate);
 
     res.json({ matches, total, page: pageNum, totalPages, stats });
   } catch (err) {
@@ -72,11 +78,16 @@ router.get('/history', async (req, res, next) => {
 // GET /api/history/curated
 router.get('/history/curated', async (req, res, next) => {
   try {
-    const [allMatches, modelMatches] = await Promise.all([
+    const [allMatches, modelMatches, shootouts] = await Promise.all([
       fetchAllMatches(),
       fetchMatches(),
+      fetchShootouts(),
     ]);
     const elo = computeEloRatings(modelMatches);
+    const annotate = m => {
+      const so = shootouts.get(`${m.date}|${m.home}|${m.away}`);
+      return so ? { ...m, penaltyWinner: so.winner } : m;
+    };
 
     const both = allMatches.filter(m => m.home && m.away);
 
@@ -103,7 +114,7 @@ router.get('/history/curated', async (req, res, next) => {
       .sort((a, b) => b.eloDiff - a.eloDiff)
       .slice(0, 5);
 
-    res.json({ highestScoring, biggestUpsets });
+    res.json({ highestScoring: highestScoring.map(annotate), biggestUpsets: biggestUpsets.map(annotate) });
   } catch (err) {
     next(err);
   }
