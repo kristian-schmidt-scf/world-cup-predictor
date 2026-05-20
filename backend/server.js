@@ -7,6 +7,7 @@ import teamsRouter    from './routes/teams.js';
 import matchesRouter  from './routes/matches.js';
 import simulateRouter from './routes/simulate.js';
 import resultsRouter  from './routes/results.js';
+import historyRouter  from './routes/history.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
@@ -31,6 +32,7 @@ app.use('/api', teamsRouter);
 app.use('/api', matchesRouter);
 app.use('/api', simulateRouter);
 app.use('/api', resultsRouter);
+app.use('/api', historyRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));

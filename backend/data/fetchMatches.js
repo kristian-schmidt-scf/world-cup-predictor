@@ -9,8 +9,12 @@ import { TEAM_BY_NAME } from './teams.js';
 const RESULTS_URL =
   'https://raw.githubusercontent.com/martj42/international_results/master/results.csv';
 
-const CACHE_KEY     = 'historical_matches';
-const CACHE_KEY_ALL = 'historical_matches_all';
+const SHOOTOUTS_URL =
+  'https://raw.githubusercontent.com/martj42/international_results/master/shootouts.csv';
+
+const CACHE_KEY           = 'historical_matches';
+const CACHE_KEY_ALL       = 'historical_matches_all';
+const CACHE_KEY_SHOOTOUTS = 'historical_shootouts';
 const CACHE_TTL_HOURS = 24;
 // Elo needs longer history for calibration; form only uses last 10 matches anyway
 const CUTOFF_DATE = '2010-01-01';
@@ -128,4 +132,37 @@ export async function fetchAllMatches() {
   set(CACHE_KEY_ALL, matches, CACHE_TTL_HOURS);
   console.log(`[fetchAllMatches] loaded ${matches.length} matches (full history)`);
   return matches;
+}
+
+// Returns a Map keyed by `date|homeId|awayId` → { winner: teamId }
+// Covers penalty shootout outcomes from the martj42 shootouts dataset.
+export async function fetchShootouts() {
+  const cached = get(CACHE_KEY_SHOOTOUTS);
+  if (cached) return new Map(cached);
+
+  let raw;
+  try {
+    const res = await fetch(SHOOTOUTS_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    raw = await res.text();
+  } catch (err) {
+    console.warn(`[fetchShootouts] fetch failed (${err.message}), using stale cache`);
+    const stale = getStale(CACHE_KEY_SHOOTOUTS);
+    if (stale) return new Map(stale);
+    return new Map(); // shootout data is optional — don't throw
+  }
+
+  const rows = parseCsv(raw);
+  const entries = [];
+  for (const r of rows) {
+    const homeId   = resolveTeamId(r.home_team);
+    const awayId   = resolveTeamId(r.away_team);
+    const winnerId = resolveTeamId(r.winner);
+    if (!homeId || !awayId || !winnerId) continue;
+    entries.push([`${r.date}|${homeId}|${awayId}`, { winner: winnerId }]);
+  }
+
+  set(CACHE_KEY_SHOOTOUTS, entries, CACHE_TTL_HOURS);
+  console.log(`[fetchShootouts] loaded ${entries.length} penalty shootout records`);
+  return new Map(entries);
 }
