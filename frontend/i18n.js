@@ -210,6 +210,15 @@ const STRINGS = {
     histHighScoring:    'Highest-Scoring',
     histBiggestUpsets:  'Biggest Upsets',
 
+    // Share cards
+    shareCardTitle:        'Share Predictions',
+    shareFormatLandscape:  'Landscape',
+    shareFormatSquare:     'Square',
+    shareOnX:              'Share on X',
+    shareCopyImage:        'Copy Image',
+    shareDownload:         'Download PNG',
+    shareNoSim:            'Run a simulation to generate a share card',
+
     // Sankey flow diagram
     sankeyTitle:      'Tournament Flow',
     sankeyToggle:     'Show Flow Diagram',
@@ -457,6 +466,15 @@ const STRINGS = {
     histCuratedTitle:   'Größte Spiele',
     histHighScoring:    'Torreichste Spiele',
     histBiggestUpsets:  'Größte Überraschungen',
+
+    // Share cards
+    shareCardTitle:        'Vorhersagen teilen',
+    shareFormatLandscape:  'Querformat',
+    shareFormatSquare:     'Quadrat',
+    shareOnX:              'Auf X teilen',
+    shareCopyImage:        'Bild kopieren',
+    shareDownload:         'PNG herunterladen',
+    shareNoSim:            'Simulation starten um eine Grafik zu erstellen',
 
     // Sankey flow diagram
     sankeyTitle:      'Turnierverlauf',
