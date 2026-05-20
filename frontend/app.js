@@ -62,9 +62,10 @@ const state = {
   lbUser:         null,
   lbData:         null,
   myGroupPicks:   null,   // { A:[id,id,id,id], ... }
+  myThirdPicks:   null,   // array of 8 group letters whose 3rd-place team advances
   myR32Pairs:     null,   // [[teamA,teamB], ...] 16 pairs
   bracketPicks:   null,   // { r32:[...16], r16:[...8], qf:[...4], sf:[...2], champion:null }
-  bcStep:         null,   // null|'groups'|'r32'|'r16'|'qf'|'sf'|'final'
+  bcStep:         null,   // null|'groups'|'thirds'|'r32'|'r16'|'qf'|'sf'|'final'
 };
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -2153,15 +2154,21 @@ function defaultGroupPicks() {
 function buildR32Pairs(groupPicks) {
   const pos = (group, idx) => groupPicks[group]?.[idx] ?? null; // 0=1st 1=2nd 2=3rd
 
-  // Rank all 12 3rd-place teams by model winner probability, pick best 8
-  const thirds = 'ABCDEFGHIJKL'.split('').map(g => ({
-    group: g, id: pos(g, 2),
-    prob: teamProbs(pos(g, 2))?.winner ?? 0,
-  }));
-  const best8Groups = [...thirds].sort((a, b) => b.prob - a.prob)
-    .slice(0, 8).map(t => t.group);
-  const thirdByGroup = Object.fromEntries(thirds.map(t => [t.group, t.id]));
-  const slotAssign   = thirdPlaceAssign(best8Groups); // [group per slot index]
+  const thirdByGroup = Object.fromEntries(
+    'ABCDEFGHIJKL'.split('').map(g => [g, pos(g, 2)])
+  );
+
+  // Use user's explicit third-place picks; fall back to model ranking if not set
+  const chosen8 = state.myThirdPicks?.length === 8
+    ? state.myThirdPicks
+    : (() => {
+        const thirds = 'ABCDEFGHIJKL'.split('').map(g => ({
+          group: g, prob: teamProbs(pos(g, 2))?.winner ?? 0,
+        }));
+        return [...thirds].sort((a, b) => b.prob - a.prob).slice(0, 8).map(t => t.group);
+      })();
+
+  const slotAssign = thirdPlaceAssign(chosen8);
 
   return R32_DEFS.map(def => {
     const a = def.aType === 'winner'    ? pos(def.aGroup, 0)
@@ -2169,7 +2176,7 @@ function buildR32Pairs(groupPicks) {
             : null;
     const b = def.bType === 'winner'    ? pos(def.bGroup, 0)
             : def.bType === 'runner-up' ? pos(def.bGroup, 1)
-            : def.bType === 'third'     ? thirdByGroup[slotAssign[def.bSlot]] ?? null
+            : def.bType === 'third'     ? (thirdByGroup[slotAssign[def.bSlot]] ?? null)
             : null;
     return [a, b];
   });
@@ -2264,11 +2271,77 @@ function renderGroupPickerStep() {
   });
 
   document.getElementById('bc-gen-bracket').addEventListener('click', () => {
+    state.myThirdPicks = null; // reset so thirds step starts fresh
+    state.bcStep = 'thirds';
+    renderThirdPickerStep();
+  });
+}
+
+// ── Step: Third-Place Picker ──────────────────────────────────────────────
+
+function renderThirdPickerStep() {
+  bcShowNormal(false);
+  const wrap = document.getElementById('bracket-creator');
+
+  // Pre-populate with model's best 8 on first visit
+  if (!state.myThirdPicks) {
+    const thirds = 'ABCDEFGHIJKL'.split('').map(g => ({
+      group: g, prob: teamProbs(state.myGroupPicks[g]?.[2])?.winner ?? 0,
+    }));
+    state.myThirdPicks = [...thirds].sort((a, b) => b.prob - a.prob)
+      .slice(0, 8).map(t => t.group);
+  }
+
+  const picked   = new Set(state.myThirdPicks);
+  const n        = picked.size;
+  const allDone  = n === 8;
+
+  const teamCards = 'ABCDEFGHIJKL'.split('').map(group => {
+    const id       = state.myGroupPicks[group]?.[2];
+    const isPicked = picked.has(group);
+    const disabled = !isPicked && n >= 8;
+    return `<button class="bc-third-btn${isPicked ? ' bc-third-picked' : ''}"
+                    data-group="${group}" ${disabled ? 'disabled' : ''}>
+      <span class="bc-group-badge">${t('bcGroupThird')} ${t('thGrp')} ${group}</span>
+      <div class="bc-third-team">${flag(id)}<span>${getTeamName(id)}</span></div>
+    </button>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="bc-header">${bcStepBar('thirds')}</div>
+    <h2 class="bc-title">${t('bcThirdsTitle')}</h2>
+    <p class="bc-desc">${t('bcThirdsDesc', n)}</p>
+    <div class="bc-thirds-grid">${teamCards}</div>
+    <div class="bc-footer">
+      <button class="btn-secondary" id="bc-back">${t('bcBackRound')}</button>
+      <button class="btn-primary" id="bc-gen-r32" ${!allDone ? 'disabled' : ''}>${t('bcGenBracket')}</button>
+    </div>`;
+
+  wrap.querySelectorAll('.bc-third-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const group = btn.dataset.group;
+      if (picked.has(group)) {
+        picked.delete(group);
+      } else if (picked.size < 8) {
+        picked.add(group);
+      }
+      state.myThirdPicks = [...picked];
+      renderThirdPickerStep();
+    });
+  });
+
+  document.getElementById('bc-back').addEventListener('click', () => {
+    state.bcStep = 'groups';
+    renderGroupPickerStep();
+  });
+
+  document.getElementById('bc-gen-r32').addEventListener('click', () => {
     state.myR32Pairs   = buildR32Pairs(state.myGroupPicks);
     state.bracketPicks = {
-      r32: Array(16).fill(null), r16: Array(8).fill(null),
-      qf: Array(4).fill(null),   sf: Array(2).fill(null),
-      champion: null, r32Pairs: state.myR32Pairs,
+      r32:   Array(16).fill(null), r16: Array(8).fill(null),
+      qf:    Array(4).fill(null),  sf:  Array(2).fill(null),
+      final: Array(1).fill(null),
+      champion: null, r32Pairs: state.myR32Pairs, myThirdPicks: state.myThirdPicks,
     };
     state.bcStep = 'r32';
     renderBracketRoundStep();
@@ -2280,6 +2353,7 @@ function renderGroupPickerStep() {
 function bcStepBar(current) {
   const steps = [
     ['groups', t('bcStepGroups')],
+    ['thirds', t('bcStepThirds')],
     ['r32',    t('bcStepR32')],
     ['r16',    t('bcStepR16')],
     ['qf',     t('bcStepQF')],
@@ -2366,9 +2440,13 @@ function renderBracketRoundStep() {
 
   document.getElementById('bc-back')?.addEventListener('click', () => {
     const ri = BC_ROUNDS.indexOf(round);
-    state.bcStep = ri > 0 ? BC_ROUNDS[ri - 1] : 'groups';
-    if (state.bcStep === 'groups') renderGroupPickerStep();
-    else renderBracketRoundStep();
+    if (ri === 0) {
+      state.bcStep = 'thirds';
+      renderThirdPickerStep();
+    } else {
+      state.bcStep = BC_ROUNDS[ri - 1];
+      renderBracketRoundStep();
+    }
   });
 
   document.getElementById('bc-next')?.addEventListener('click', () => {
@@ -2585,11 +2663,15 @@ function renderLbPicks(container) {
   });
 
   document.getElementById('lb-open-bracket').addEventListener('click', () => {
-    state.myGroupPicks = defaultGroupPicks();
+    state.myGroupPicks  = defaultGroupPicks();
+    state.myThirdPicks  = null;
     // Restore bracket picks from saved bracket if available
     if (picks.bracket) {
       state.bracketPicks = picks.bracket;
+      // Ensure saved brackets have the final array (back-compat with older saves)
+      if (!state.bracketPicks.final) state.bracketPicks.final = Array(1).fill(null);
       state.myR32Pairs   = state.bracketPicks.r32Pairs ?? buildR32Pairs(state.myGroupPicks);
+      state.myThirdPicks = state.bracketPicks.myThirdPicks ?? null;
     }
     state.bcStep = 'groups';
     renderGroupPickerStep();

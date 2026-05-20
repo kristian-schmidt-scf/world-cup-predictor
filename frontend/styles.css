@@ -889,6 +889,25 @@ details[open] .gc-summary::after { content: ' ▴'; }
   border-bottom: 1px solid var(--border); background: var(--surface2);
 }
 
+/* Third-place picker */
+.bc-thirds-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 10px; margin-bottom: 20px;
+}
+.bc-third-btn {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 6px; padding: 12px 8px; text-align: center;
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: var(--radius); cursor: pointer;
+  color: var(--text); font-size: 13px; font-weight: 600;
+  transition: border-color .15s, background .15s;
+}
+.bc-third-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-bg); }
+.bc-third-btn.bc-third-picked { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.bc-third-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.bc-group-badge { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+.bc-third-team { display: flex; align-items: center; gap: 5px; }
+
 /* Champion reveal */
 .bc-champion-reveal {
   display: flex; align-items: center; gap: 12px;
@@ -1032,4 +1051,5 @@ details[open] .gc-summary::after { content: ' ▴'; }
   .lb-picks-grid      { grid-template-columns: 1fr; }
   .bc-groups-grid     { grid-template-columns: repeat(2, 1fr); }
   .bc-matches-grid    { grid-template-columns: repeat(2, 1fr); }
+  .bc-thirds-grid     { grid-template-columns: repeat(3, 1fr); }
 }
