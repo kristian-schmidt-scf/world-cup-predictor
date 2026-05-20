@@ -7,7 +7,8 @@ import teamsRouter    from './routes/teams.js';
 import matchesRouter  from './routes/matches.js';
 import simulateRouter from './routes/simulate.js';
 import resultsRouter  from './routes/results.js';
-import historyRouter  from './routes/history.js';
+import historyRouter      from './routes/history.js';
+import leaderboardRouter  from './routes/leaderboard.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
@@ -16,8 +17,8 @@ const app  = express();
 // CORS — allow all origins for local frontend dev
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
 });
@@ -33,6 +34,7 @@ app.use('/api', matchesRouter);
 app.use('/api', simulateRouter);
 app.use('/api', resultsRouter);
 app.use('/api', historyRouter);
+app.use('/api', leaderboardRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));

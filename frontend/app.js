@@ -58,6 +58,9 @@ const state = {
   sort:           { col: 'elo', dir: -1 },  // dir: -1 = desc, 1 = asc
   bracketView:    'tree',
   shareFormat:    'landscape',
+  lbToken:        (() => { try { return localStorage.getItem('wc26-lb-token'); } catch { return null; } })(),
+  lbUser:         null,
+  lbData:         null,
 };
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -153,9 +156,10 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b   => b.classList.remove('active'));
   document.getElementById(`tab-${tab}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${tab}"]`)?.classList.add('active');
-  if (tab === 'bracket') { renderBracket(); renderShareSection(); }
-  if (tab === 'groups')  renderGroupsTab();
-  if (tab === 'history') renderHistoryTab();
+  if (tab === 'bracket')     { renderBracket(); renderShareSection(); }
+  if (tab === 'groups')      renderGroupsTab();
+  if (tab === 'history')     renderHistoryTab();
+  if (tab === 'leaderboard') renderLeaderboardTab();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2044,6 +2048,268 @@ function initHistoryView() {
     renderHistoryResults();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LEADERBOARD TAB
+// ════════════════════════════════════════════════════════════════════════════
+
+function getModelPicks() {
+  if (!state.simResults) return null;
+  const sorted = [...state.teams]
+    .map(tm => ({ id: tm.id, prob: teamProbs(tm.id)?.winner ?? 0 }))
+    .sort((a, b) => b.prob - a.prob);
+  return {
+    winner:     sorted[0]?.id ?? null,
+    finalist:   sorted[1]?.id ?? null,
+    semiFinals: [sorted[2]?.id, sorted[3]?.id].filter(Boolean),
+  };
+}
+
+function lbAuthHeader() {
+  return state.lbToken ? { Authorization: `Bearer ${state.lbToken}` } : {};
+}
+
+async function lbFetchMe() {
+  if (!state.lbToken) return;
+  try {
+    const res = await fetch('/api/leaderboard/me', { headers: lbAuthHeader() });
+    if (res.ok) state.lbUser = await res.json();
+    else if (res.status === 404) { state.lbToken = null; state.lbUser = null; }
+  } catch {}
+}
+
+async function lbFetchLeaderboard() {
+  try {
+    const res = await fetch('/api/leaderboard');
+    if (res.ok) state.lbData = (await res.json()).users;
+  } catch {}
+}
+
+function lbTeamOptions(selected, exclude = []) {
+  return [...state.teams]
+    .sort((a, b) => getTeamName(a.id).localeCompare(getTeamName(b.id)))
+    .map(tm => {
+      if (exclude.includes(tm.id) && tm.id !== selected) return '';
+      return `<option value="${tm.id}"${tm.id === selected ? ' selected' : ''}>${flag(tm.id)} ${getTeamName(tm.id)}</option>`;
+    })
+    .filter(Boolean)
+    .join('');
+}
+
+function renderLbRegistration(container) {
+  container.innerHTML = `
+    <div class="lb-card">
+      <h3 class="lb-card-title">${t('lbJoinTitle')}</h3>
+      <p class="lb-card-desc">${t('lbJoinDesc')}</p>
+      <p class="lb-scoring-note">${t('lbScoringNote')}</p>
+      <div class="lb-form-row">
+        <input type="text" id="lb-username" class="lb-input" placeholder="${t('lbUsernamePlaceholder')}" maxlength="20">
+        <button class="btn-primary" id="lb-register-btn">${t('lbRegister')}</button>
+      </div>
+      <div id="lb-reg-error" class="lb-error"></div>
+      <div class="lb-restore">
+        <p class="lb-restore-title">${t('lbRestoreTitle')}</p>
+        <p class="lb-card-desc">${t('lbRestoreDesc')}</p>
+        <div class="lb-form-row">
+          <input type="text" id="lb-restore-token" class="lb-input lb-input-token" placeholder="${t('lbRestoreToken')}">
+          <button class="btn-secondary" id="lb-restore-btn">${t('lbRestore')}</button>
+        </div>
+        <div id="lb-restore-error" class="lb-error"></div>
+      </div>
+    </div>`;
+
+  document.getElementById('lb-register-btn').addEventListener('click', async () => {
+    const btn      = document.getElementById('lb-register-btn');
+    const errEl    = document.getElementById('lb-reg-error');
+    const username = document.getElementById('lb-username').value.trim();
+    if (!username) return;
+    btn.disabled = true; errEl.textContent = '';
+    try {
+      const res  = await fetch('/api/leaderboard/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; btn.disabled = false; return; }
+      state.lbToken = data.token;
+      state.lbUser  = { id: data.id, username: data.username, picks: null, totalScore: 0, scores: {} };
+      try { localStorage.setItem('wc26-lb-token', data.token); } catch {}
+      container.innerHTML = `
+        <div class="lb-card">
+          <p class="lb-welcome">${t('lbWelcome', data.username)}</p>
+          <p class="lb-token-label">${t('lbTokenLabel')}</p>
+          <div class="lb-token-wrap">
+            <code class="lb-token-code">${data.token}</code>
+            <button class="btn-secondary btn-sm" id="lb-copy-token">${t('shareCopyImage').replace('Image','Token')}</button>
+          </div>
+          <p class="lb-card-desc">${t('lbTokenWarn')}</p>
+          <button class="btn-primary" id="lb-token-ok">${t('lbTokenOk')}</button>
+        </div>`;
+      document.getElementById('lb-copy-token')?.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(data.token).catch(() => {});
+      });
+      document.getElementById('lb-token-ok').addEventListener('click', () => renderLeaderboardTab());
+    } catch { errEl.textContent = t('statusFailed'); btn.disabled = false; }
+  });
+
+  document.getElementById('lb-restore-btn').addEventListener('click', async () => {
+    const btn    = document.getElementById('lb-restore-btn');
+    const errEl  = document.getElementById('lb-restore-error');
+    const token  = document.getElementById('lb-restore-token').value.trim();
+    if (!token) return;
+    btn.disabled = true; errEl.textContent = '';
+    try {
+      const res = await fetch('/api/leaderboard/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { errEl.textContent = t('lbRestoreFailed'); btn.disabled = false; return; }
+      const data = await res.json();
+      state.lbToken = token;
+      state.lbUser  = data;
+      try { localStorage.setItem('wc26-lb-token', token); } catch {}
+      renderLeaderboardTab();
+    } catch { errEl.textContent = t('statusFailed'); btn.disabled = false; }
+  });
+}
+
+function renderLbPicks(container) {
+  const user   = state.lbUser;
+  const picks  = user?.picks ?? {};
+  const mp     = getModelPicks();
+
+  container.innerHTML = `
+    <div class="lb-card">
+      <div class="lb-user-header">
+        <span class="lb-username-badge">${t('lbWelcomeName', user.username)}</span>
+        <span class="lb-score-badge">${t('lbScore', user.totalScore)}</span>
+        <button class="btn-secondary btn-sm lb-signout-btn" id="lb-signout">${t('lbSignOut')}</button>
+      </div>
+      <h3 class="lb-card-title">${t('lbYourPicks')}</h3>
+      ${mp ? `<p class="lb-model-hint">💡 ${t('lbModelHint', getTeamName(mp.winner))}</p>` : ''}
+      <p class="lb-scoring-note">${t('lbScoringNote')}</p>
+      <div class="lb-picks-grid">
+        <label class="lb-pick-label">${t('lbPickWinner')}</label>
+        <select id="lb-pick-winner" class="lb-select">
+          <option value="">— ${t('lbPickChoose')} —</option>
+          ${lbTeamOptions(picks.winner)}
+        </select>
+        <label class="lb-pick-label">${t('lbPickFinalist')}</label>
+        <select id="lb-pick-finalist" class="lb-select">
+          <option value="">— ${t('lbPickChoose')} —</option>
+          ${lbTeamOptions(picks.finalist)}
+        </select>
+        <label class="lb-pick-label">${t('lbPickSF1')}</label>
+        <select id="lb-pick-sf1" class="lb-select">
+          <option value="">— ${t('lbPickChoose')} —</option>
+          ${lbTeamOptions(picks.semiFinals?.[0])}
+        </select>
+        <label class="lb-pick-label">${t('lbPickSF2')}</label>
+        <select id="lb-pick-sf2" class="lb-select">
+          <option value="">— ${t('lbPickChoose')} —</option>
+          ${lbTeamOptions(picks.semiFinals?.[1])}
+        </select>
+      </div>
+      <div class="lb-picks-actions">
+        <button class="btn-primary" id="lb-save-btn">${t('lbSavePicks')}</button>
+        <span id="lb-save-status" class="lb-save-status"></span>
+      </div>
+    </div>`;
+
+  document.getElementById('lb-signout').addEventListener('click', () => {
+    state.lbToken = null; state.lbUser = null;
+    try { localStorage.removeItem('wc26-lb-token'); } catch {}
+    renderLeaderboardTab();
+  });
+
+  document.getElementById('lb-save-btn').addEventListener('click', async () => {
+    const btn    = document.getElementById('lb-save-btn');
+    const status = document.getElementById('lb-save-status');
+    const winner   = document.getElementById('lb-pick-winner').value;
+    const finalist = document.getElementById('lb-pick-finalist').value;
+    const sf1      = document.getElementById('lb-pick-sf1').value;
+    const sf2      = document.getElementById('lb-pick-sf2').value;
+    if (!winner) { status.textContent = t('lbPickRequired'); return; }
+    const selected = [winner, finalist, sf1, sf2].filter(Boolean);
+    if (new Set(selected).size !== selected.length) {
+      status.textContent = t('lbPickNoDupes'); return;
+    }
+    const newPicks = { winner, finalist: finalist || null, semiFinals: [sf1, sf2].filter(Boolean) };
+    btn.disabled = true; status.textContent = '';
+    try {
+      const res = await fetch('/api/leaderboard/picks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...lbAuthHeader() },
+        body: JSON.stringify({ picks: newPicks }),
+      });
+      if (res.ok) {
+        state.lbUser.picks = newPicks;
+        status.textContent = t('lbPicksSaved');
+        await lbFetchLeaderboard();
+        renderLbTable(document.getElementById('lb-table-section'));
+      } else {
+        status.textContent = t('statusFailed');
+      }
+    } catch { status.textContent = t('statusFailed'); }
+    finally { btn.disabled = false; }
+  });
+}
+
+function renderLbTable(container) {
+  if (!container) return;
+  if (!state.lbData?.length) {
+    container.innerHTML = `
+      <h3 class="lb-section-title">${t('lbTitle')}</h3>
+      <div class="empty-state"><p>${t('lbNoUsers')}</p></div>`;
+    return;
+  }
+  const mp = getModelPicks();
+  const rows = state.lbData.map((user, i) => {
+    const agreesModel = mp && user.picks?.winner === mp.winner;
+    const badge = agreesModel ? `<span class="lb-model-badge">${t('lbAgreesModel')}</span>` : '';
+    const sfText = (user.picks?.semiFinals ?? [])
+      .map(id => `${flag(id)} ${id}`).join('  ') || '—';
+    return `<tr${state.lbUser?.id === user.id ? ' class="lb-me-row"' : ''}>
+      <td class="lb-rank">${i + 1}</td>
+      <td><strong>${user.username}</strong>${badge}</td>
+      <td>${user.picks?.winner   ? `${flag(user.picks.winner)} ${getTeamName(user.picks.winner)}`     : '—'}</td>
+      <td>${user.picks?.finalist ? `${flag(user.picks.finalist)} ${getTeamName(user.picks.finalist)}` : '—'}</td>
+      <td class="lb-sf-cell">${sfText}</td>
+      <td class="lb-score-cell">${user.totalScore}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <h3 class="lb-section-title">${t('lbTitle')}</h3>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>#</th>
+          <th>${t('lbThUser')}</th>
+          <th>${t('lbThWinner')}</th>
+          <th>${t('lbThFinalist')}</th>
+          <th>${t('lbThSF')}</th>
+          <th>${t('lbThScore')}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function renderLeaderboardTab() {
+  const userSection  = document.getElementById('lb-user-section');
+  const tableSection = document.getElementById('lb-table-section');
+  if (!userSection) return;
+
+  await Promise.all([lbFetchMe(), lbFetchLeaderboard()]);
+
+  if (!state.lbToken || !state.lbUser) {
+    renderLbRegistration(userSection);
+  } else {
+    renderLbPicks(userSection);
+  }
+  renderLbTable(tableSection);
 }
 
 // ════════════════════════════════════════════════════════════════════════════

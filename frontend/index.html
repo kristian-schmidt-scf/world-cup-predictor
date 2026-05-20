@@ -23,7 +23,8 @@
         <button class="tab-btn"        data-tab="groups"   data-i18n="tabGroups">Groups</button>
         <button class="tab-btn"        data-tab="bracket"  data-i18n="tabBracket">Bracket</button>
         <button class="tab-btn"        data-tab="scenario" data-i18n="tabScenario">Scenario</button>
-        <button class="tab-btn"        data-tab="history"  data-i18n="tabHistory">History</button>
+        <button class="tab-btn"        data-tab="history"     data-i18n="tabHistory">History</button>
+        <button class="tab-btn"        data-tab="leaderboard" data-i18n="tabLeaderboard">Leaderboard</button>
       </nav>
       <div class="sim-status" id="sim-status"></div>
       <button id="lang-btn" class="lang-btn" title="Switch language / Sprache wechseln">DE</button>
@@ -205,6 +206,14 @@
     </div>
 
   </main>
+
+  <!-- ── LEADERBOARD ────────────────────────────────────────────────────────── -->
+  <div id="tab-leaderboard" class="tab-pane">
+    <div class="lb-layout">
+      <div class="lb-left"  id="lb-user-section"></div>
+      <div class="lb-right" id="lb-table-section"></div>
+    </div>
+  </div>
 
   <!-- Upset toast notification -->
   <div id="upset-toast" class="upset-toast" aria-live="polite"></div>
