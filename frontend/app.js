@@ -66,6 +66,14 @@ const state = {
   myR32Pairs:     null,   // [[teamA,teamB], ...] 16 pairs
   bracketPicks:   null,   // { r32:[...16], r16:[...8], qf:[...4], sf:[...2], champion:null }
   bcStep:         null,   // null|'groups'|'thirds'|'r32'|'r16'|'qf'|'sf'|'final'
+  fantasy: {
+    players:   null,      // enriched player array from API (loaded once)
+    squad:     [],        // selected Player objects (max 15)
+    captainId: null,
+    view:      'builder', // 'builder' | 'myteam' | 'optimise'
+    filter:    { pos: '', nameQuery: '', maxPrice: 15 },
+    sortBy:    'xpts',
+  },
 };
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -165,6 +173,7 @@ function switchTab(tab) {
   if (tab === 'groups')      renderGroupsTab();
   if (tab === 'history')     renderHistoryTab();
   if (tab === 'leaderboard') renderLeaderboardTab();
+  if (tab === 'fantasy')     renderFantasyTab();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2762,6 +2771,385 @@ function rerenderAll() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// FANTASY TAB
+// ════════════════════════════════════════════════════════════════════════════
+
+const FANTASY_SLOTS  = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
+const POS_COLORS     = { GK: '#f59e0b', DEF: '#22c55e', MID: '#3b82f6', FWD: '#ef4444' };
+const FANTASY_BUDGET = 100;
+
+async function loadFantasyPlayers() {
+  if (state.fantasy.players) return;
+  const data = await api('/fantasy/players');
+  state.fantasy.players = data.players;
+}
+
+function renderFantasyTab() {
+  ['builder','myteam','optimise'].forEach(v => {
+    document.getElementById(`fantasy-view-${v}`)
+      ?.classList.toggle('active', v === state.fantasy.view);
+  });
+  if (state.fantasy.view === 'builder')  renderFantasyBuilder();
+  if (state.fantasy.view === 'myteam')   renderFantasyMyTeam();
+  if (state.fantasy.view === 'optimise') renderFantasyOptimise();
+}
+
+function fantasyCountryCounts() {
+  const c = {};
+  state.fantasy.squad.forEach(p => { c[p.team] = (c[p.team] ?? 0) + 1; });
+  return c;
+}
+
+function fantasySlotsUsed() {
+  const f = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  state.fantasy.squad.forEach(p => f[p.pos]++);
+  return f;
+}
+
+function fantasySpent() {
+  return state.fantasy.squad.reduce((s, p) => s + p.price, 0);
+}
+
+function canAddPlayer(p) {
+  if (state.fantasy.squad.find(x => x.id === p.id)) return { ok: false, msg: t('fantasyToastDuplicate') };
+  if (state.fantasy.squad.length >= 15)              return { ok: false, msg: t('fantasyToastFull') };
+  const slots = fantasySlotsUsed();
+  if (slots[p.pos] >= FANTASY_SLOTS[p.pos]) return { ok: false, msg: t('fantasyToastPos', p.pos, FANTASY_SLOTS[p.pos]) };
+  if (fantasySpent() + p.price > FANTASY_BUDGET) return { ok: false, msg: t('fantasyToastBudget') };
+  const cc = fantasyCountryCounts();
+  if ((cc[p.team] ?? 0) >= 3) return { ok: false, msg: t('fantasyToastCountry', p.team) };
+  return { ok: true };
+}
+
+function showFantasyToast(msg) {
+  const el = document.getElementById('upset-toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('visible');
+  clearTimeout(el._ft);
+  el._ft = setTimeout(() => el.classList.remove('visible'), 3000);
+}
+
+function renderBudgetBar() {
+  const spent = fantasySpent();
+  const pct   = Math.min(100, (spent / FANTASY_BUDGET) * 100);
+  const tight = pct > 90;
+  const slots = fantasySlotsUsed();
+  document.getElementById('fantasy-budget-bar').innerHTML = `
+    <div class="budget-label">
+      <span>$${spent.toFixed(1)}M / $${FANTASY_BUDGET}M</span>
+      <span class="budget-remaining${tight ? ' budget-tight' : ''}">$${(FANTASY_BUDGET - spent).toFixed(1)}M remaining</span>
+    </div>
+    <div class="budget-track"><div class="budget-fill${tight ? ' budget-fill-warn' : ''}" style="width:${pct}%"></div></div>
+    <div class="slot-counts">
+      ${Object.entries(FANTASY_SLOTS).map(([pos, max]) => {
+        const n = slots[pos];
+        return `<span class="slot-count${n === max ? ' slot-full' : ''}">${pos}: ${n}/${max}</span>`;
+      }).join('')}
+    </div>`;
+}
+
+function renderPitch() {
+  const byPos = { GK: [], DEF: [], MID: [], FWD: [] };
+  state.fantasy.squad.forEach(p => byPos[p.pos].push(p));
+  const rows = [
+    { pos: 'FWD', slots: FANTASY_SLOTS.FWD },
+    { pos: 'MID', slots: FANTASY_SLOTS.MID },
+    { pos: 'DEF', slots: FANTASY_SLOTS.DEF },
+    { pos: 'GK',  slots: FANTASY_SLOTS.GK  },
+  ];
+  const pitch = document.getElementById('fantasy-pitch');
+  if (!pitch) return;
+  const banner = state.fantasy.optimised
+    ? `<div class="optimised-banner">${t('fantasyOptimisedBanner')}</div>`
+    : '';
+  pitch.innerHTML = banner + `<div class="pitch-grass">${
+    rows.map(({ pos, slots }) =>
+      `<div class="pitch-row">${Array.from({ length: slots }, (_, i) => {
+        const p = byPos[pos][i];
+        if (p) {
+          const isCap = p.id === state.fantasy.captainId;
+          return `<div class="pitch-slot pitch-slot-filled">
+            ${isCap ? '<span class="captain-badge">C</span>' : ''}
+            <button class="pitch-remove" data-id="${p.id}">×</button>
+            <span class="pitch-player-name">${p.name.split(' ').pop()}</span>
+            <span class="pitch-player-price">$${p.price}M</span>
+          </div>`;
+        }
+        return `<div class="pitch-slot pitch-slot-empty"><span class="pitch-pos-label">${pos}</span></div>`;
+      }).join('')}</div>`
+    ).join('')
+  }</div>`;
+
+  pitch.querySelectorAll('.pitch-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      state.fantasy.squad = state.fantasy.squad.filter(p => p.id !== id);
+      if (state.fantasy.captainId === id) state.fantasy.captainId = null;
+      state.fantasy.optimised = false;
+      renderBudgetBar();
+      renderPitch();
+      renderPlayerBrowser();
+    });
+  });
+}
+
+function renderFilters() {
+  const f = document.getElementById('fantasy-filters');
+  if (!f) return;
+  f.innerHTML = `
+    ${['All','GK','DEF','MID','FWD'].map(pos =>
+      `<button class="fantasy-pos-btn${state.fantasy.filter.pos === (pos === 'All' ? '' : pos) ? ' active' : ''}"
+        data-pos="${pos === 'All' ? '' : pos}">${t(pos === 'All' ? 'fantasyAllPos' : pos) || pos}</button>`
+    ).join('')}
+    <input class="fantasy-search" type="text" placeholder="${t('fantasySearchPlaceholder')}"
+      value="${state.fantasy.filter.nameQuery}">
+    <div class="fantasy-price-filter">
+      <label>${t('fantasyMaxPrice')} $<input type="number" min="3.5" max="15" step="0.5"
+        value="${state.fantasy.filter.maxPrice}" style="width:55px;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;">M</label>
+    </div>`;
+
+  f.querySelectorAll('.fantasy-pos-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.fantasy.filter.pos = btn.dataset.pos;
+      renderFilters();
+      renderPlayerBrowser();
+    });
+  });
+  const searchEl = f.querySelector('.fantasy-search');
+  searchEl?.addEventListener('input', () => {
+    state.fantasy.filter.nameQuery = searchEl.value;
+    renderPlayerBrowser();
+  });
+  const priceEl = f.querySelector('input[type=number]');
+  priceEl?.addEventListener('input', () => {
+    state.fantasy.filter.maxPrice = parseFloat(priceEl.value) || 15;
+    renderPlayerBrowser();
+  });
+}
+
+function renderPlayerBrowser() {
+  const tbody = document.getElementById('fantasy-players-tbody');
+  if (!tbody || !state.fantasy.players) return;
+
+  const { pos, nameQuery, maxPrice } = state.fantasy.filter;
+  const squadIds     = new Set(state.fantasy.squad.map(p => p.id));
+  const cc           = fantasyCountryCounts();
+
+  let rows = state.fantasy.players.filter(p =>
+    (!pos      || p.pos === pos) &&
+    (!nameQuery || p.name.toLowerCase().includes(nameQuery.toLowerCase())) &&
+    p.price <= maxPrice + 0.05
+  );
+
+  const sortKey = state.fantasy.sortBy;
+  rows.sort((a, b) => sortKey === 'price'
+    ? b.price - a.price
+    : (b.xptsTotal ?? 0) - (a.xptsTotal ?? 0)
+  );
+
+  tbody.innerHTML = rows.slice(0, 200).map(p => {
+    const inSquad  = squadIds.has(p.id);
+    const atLimit  = (cc[p.team] ?? 0) >= 3 && !inSquad;
+    const col      = POS_COLORS[p.pos];
+    return `<tr class="${atLimit ? 'country-warn' : ''}${inSquad ? ' in-squad' : ''}">
+      <td><span class="badge" style="background:${col}22;color:${col};font-size:10px">${p.pos}</span></td>
+      <td>${flag(p.team)} <span style="font-size:10px;color:var(--muted)">${p.team}</span>
+        ${atLimit ? `<span class="badge badge-country-warn">3/3</span>` : ''}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</td>
+      <td>$${p.price}M</td>
+      <td class="${(p.xptsTotal ?? 0) > 20 ? 'p-high' : ''}">${(p.xptsTotal ?? 0).toFixed(1)}</td>
+      <td>${inSquad
+        ? `<button class="btn-secondary btn-sm fantasy-remove-btn" data-id="${p.id}" style="padding:2px 8px">✕</button>`
+        : `<button class="btn-primary btn-sm fantasy-add-btn" data-id="${p.id}" style="padding:2px 8px" ${atLimit ? 'disabled' : ''}>+</button>`
+      }</td>
+    </tr>`;
+  }).join('');
+
+  // Attach handlers
+  tbody.querySelectorAll('.fantasy-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = state.fantasy.players.find(x => x.id === btn.dataset.id);
+      if (!p) return;
+      const { ok, msg } = canAddPlayer(p);
+      if (!ok) { showFantasyToast(msg); return; }
+      state.fantasy.squad.push(p);
+      if (!state.fantasy.captainId) state.fantasy.captainId = p.id; // auto-captain first pick
+      renderBudgetBar(); renderPitch(); renderPlayerBrowser();
+    });
+  });
+  tbody.querySelectorAll('.fantasy-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      state.fantasy.squad = state.fantasy.squad.filter(p => p.id !== id);
+      if (state.fantasy.captainId === id) state.fantasy.captainId = null;
+      state.fantasy.optimised = false;
+      renderBudgetBar(); renderPitch(); renderPlayerBrowser();
+    });
+  });
+}
+
+function renderFantasyBuilder() {
+  if (!state.fantasy.players) {
+    document.getElementById('fantasy-players-tbody').innerHTML =
+      `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">${t('fantasyLoading')}</td></tr>`;
+    loadFantasyPlayers().then(() => {
+      renderFilters();
+      renderBudgetBar();
+      renderPitch();
+      renderPlayerBrowser();
+    });
+    return;
+  }
+  renderFilters();
+  renderBudgetBar();
+  renderPitch();
+  renderPlayerBrowser();
+}
+
+function renderFantasyMyTeam() {
+  const el = document.getElementById('fantasy-myteam-content');
+  if (!el) return;
+
+  if (!state.fantasy.squad.length) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted)">${t('fantasyNoSquad')}</div>`;
+    return;
+  }
+
+  const bestByPos = {};
+  if (state.fantasy.players) {
+    ['GK','DEF','MID','FWD'].forEach(pos => {
+      const notInSquad = state.fantasy.players.filter(
+        p => p.pos === pos && !state.fantasy.squad.find(s => s.id === p.id)
+      );
+      bestByPos[pos] = notInSquad.sort((a, b) => (b.xptsTotal ?? 0) - (a.xptsTotal ?? 0))[0];
+    });
+  }
+
+  const capId = state.fantasy.captainId;
+  const totalXpts = state.fantasy.squad.reduce((s, p) => {
+    return s + (p.xptsTotal ?? 0) * (p.id === capId ? 2 : 1);
+  }, 0);
+
+  el.innerHTML = `
+    <div class="myteam-header">
+      <div class="stat-box">
+        <div class="stat-label">${t('fantasyTotalXpts')}</div>
+        <div class="stat-value">${totalXpts.toFixed(1)}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">${t('fantasyBudgetUsed')}</div>
+        <div class="stat-value">$${fantasySpent().toFixed(1)}M</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>${t('fthPos')}</th><th>${t('fthTeam')}</th><th>${t('fthName')}</th>
+          <th>${t('fthPrice')}</th><th>${t('fantasyXptsGS')}</th>
+          <th>${t('fantasyXptsKO')}</th><th>${t('fantasyXptsTotal')}</th>
+          <th>${t('fantasyCaptain')}</th><th>${t('fantasyVsOptimal')}</th>
+        </tr></thead>
+        <tbody>
+          ${state.fantasy.squad.map(p => {
+            const isCap   = p.id === capId;
+            const best    = bestByPos[p.pos];
+            const delta   = (p.xptsTotal ?? 0) - (best?.xptsTotal ?? p.xptsTotal ?? 0);
+            const deltaClass = delta >= 0 ? 'p-high' : 'p-low';
+            const xpts    = ((p.xptsTotal ?? 0) * (isCap ? 2 : 1)).toFixed(1);
+            return `<tr>
+              <td><span class="badge" style="background:${POS_COLORS[p.pos]}22;color:${POS_COLORS[p.pos]}">${p.pos}</span></td>
+              <td>${flag(p.team)}</td>
+              <td>${p.name}</td>
+              <td>$${p.price}M</td>
+              <td>${(p.xptsGroupStage ?? 0).toFixed(1)}</td>
+              <td>${(p.xptsKnockout ?? 0).toFixed(1)}</td>
+              <td class="p-high">${xpts}${isCap ? ' ×2' : ''}</td>
+              <td>
+                <button class="btn-sm ${isCap ? 'btn-primary' : 'btn-secondary'} fantasy-cap-btn"
+                  data-id="${p.id}">${isCap ? t('fantasyIsCaptain') : t('fantasySetCaptain')}</button>
+              </td>
+              <td class="${deltaClass}">${delta >= 0 ? '+' : ''}${delta.toFixed(1)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="chip-panel">
+      <h4>${t('fantasyChipsTitle')}</h4>
+      <div class="chip-grid">
+        ${['Wildcard','12th Man','Maximum Captain','Qualification Booster'].map(c =>
+          `<div class="chip-card chip-disabled">
+            <span class="chip-name">${c}</span>
+            <span class="chip-status">${t('fantasyChipComingSoon')}</span>
+          </div>`
+        ).join('')}
+      </div>
+    </div>`;
+
+  el.querySelectorAll('.fantasy-cap-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.fantasy.captainId = btn.dataset.id;
+      renderFantasyMyTeam();
+    });
+  });
+}
+
+function renderFantasyOptimise() {
+  const el = document.getElementById('fantasy-optimise-content');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="optimise-header">
+      <p>${t('fantasyOptimiseHelp')}</p>
+      <button class="btn-primary" id="fantasy-optimise-btn">${t('fantasyFindBestXI')}</button>
+    </div>
+    <div id="optimise-result"></div>`;
+
+  document.getElementById('fantasy-optimise-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('fantasy-optimise-btn');
+    btn.disabled = true; btn.textContent = '…';
+    document.getElementById('optimise-result').innerHTML = '';
+    try {
+      const result = await api('/fantasy/optimise');
+      state.fantasy.squad     = result.squad;
+      state.fantasy.captainId = result.squad.reduce((best, p) =>
+        (p.xptsTotal ?? 0) > (best?.xptsTotal ?? 0) ? p : best, null)?.id ?? null;
+      state.fantasy.optimised = true;
+      state.fantasy.view      = 'builder';
+      document.querySelectorAll('#fantasy-pill-tabs .pill-tab')
+        .forEach(b => b.classList.toggle('active', b.dataset.view === 'builder'));
+      renderFantasyTab();
+    } catch (err) {
+      document.getElementById('optimise-result').innerHTML =
+        `<p style="color:var(--loss);margin-top:10px">${err.message}</p>`;
+    } finally {
+      btn.disabled = false; btn.textContent = t('fantasyFindBestXI');
+    }
+  });
+}
+
+function initFantasyView() {
+  document.querySelectorAll('#fantasy-pill-tabs .pill-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.fantasy.view = btn.dataset.view;
+      document.querySelectorAll('#fantasy-pill-tabs .pill-tab')
+        .forEach(b => b.classList.toggle('active', b === btn));
+      renderFantasyTab();
+    });
+  });
+
+  // Sort column headers
+  document.querySelectorAll('#fantasy-players-table th[data-sort]').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      state.fantasy.sortBy = th.dataset.sort;
+      renderPlayerBrowser();
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -2801,6 +3189,7 @@ async function init() {
     initBracketView();
     initScenarioView();
     initHistoryView();
+    initFantasyView();
     renderTeamsTable();
 
     // Auto-navigate to Scenario tab and correct group if URL had locks

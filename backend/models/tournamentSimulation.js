@@ -239,6 +239,12 @@ export function runMonteCarlo(n, params, lockedResults = {}) {
   return { probs, groups, meta: { n, winnerProbSum: round4(winnerSum) } };
 }
 
+// ── Cached probs singleton — reused by fantasy engine to avoid re-running sim ──
+let _cachedSimResult = null;
+
+export function setCachedProbs(result) { _cachedSimResult = result; }
+export function getCachedProbs()       { return _cachedSimResult; }
+
 // ── Single match prediction (exported for API use) ──────────────────────────
 export { simulateMatch, simulateGroup };
 

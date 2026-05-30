@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { loadAll, refreshAll, getAllFixtures } from '../data/index.js';
 import { estimateParams, invalidateParams } from '../models/hierarchicalBayesian.js';
-import { runMonteCarlo } from '../models/tournamentSimulation.js';
+import { runMonteCarlo, setCachedProbs } from '../models/tournamentSimulation.js';
+import { invalidate } from '../data/cache.js';
 import { validateNumSims } from '../middleware/validate.js';
 import { getResults } from '../data/results.js';
 
@@ -20,6 +21,7 @@ router.post('/simulate', validateNumSims, async (req, res, next) => {
 
     const t0 = Date.now();
     const { probs, groups, meta } = runMonteCarlo(numSims, params, merged);
+    setCachedProbs({ probs, groups });
     res.json({ probs, groups, meta: { ...meta, elapsedMs: Date.now() - t0 } });
   } catch (err) {
     next(err);
@@ -41,6 +43,7 @@ router.get('/bracket', (req, res, next) => {
 router.post('/refresh', async (req, res, next) => {
   try {
     invalidateParams();
+    invalidate('fantasy_projections');
     const { teams, fixtures, matches, elo, form, squadStats } = await refreshAll();
     estimateParams(matches, elo, squadStats);
     res.json({
