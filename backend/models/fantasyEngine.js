@@ -165,7 +165,8 @@ export function computePlayerProjections(players, params, stageProbs) {
 
 // ── Greedy squad optimiser ───────────────────────────────────────────────────
 
-const SLOTS = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
+const SLOTS    = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
+const MIN_PRICE = 4.0; // conservative price floor across all positions
 
 export function optimiseSquad(enrichedPlayers, budget = 100) {
   const filled        = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
@@ -173,16 +174,28 @@ export function optimiseSquad(enrichedPlayers, budget = 100) {
   const squad         = [];
   let   spent         = 0;
 
-  // Sort by xptsTotal / price descending (value-per-dollar)
+  // Minimum budget still needed to fill every remaining slot at floor prices
+  function minToComplete(filledState) {
+    let needed = 0;
+    for (const [pos, required] of Object.entries(SLOTS))
+      needed += Math.max(0, required - filledState[pos]) * MIN_PRICE;
+    return needed;
+  }
+
+  // Phase 1 — greedy by raw xptsTotal with look-ahead budget guard.
+  // Sorting by points (not points/price) ensures we don't leave money on the table.
   const sorted = [...enrichedPlayers].sort(
-    (a, b) => ((b.xptsTotal ?? 0) / b.price) - ((a.xptsTotal ?? 0) / a.price)
+    (a, b) => (b.xptsTotal ?? 0) - (a.xptsTotal ?? 0)
   );
 
   for (const p of sorted) {
     if (squad.length === 15) break;
-    if (filled[p.pos] >= SLOTS[p.pos])          continue;
-    if (spent + p.price > budget)                continue;
-    if ((countryCounts[p.team] ?? 0) >= 3)       continue;
+    if (filled[p.pos] >= SLOTS[p.pos])    continue;
+    if ((countryCounts[p.team] ?? 0) >= 3) continue;
+
+    const newFilled = { ...filled, [p.pos]: filled[p.pos] + 1 };
+    // Guard: after adding p, can we still afford to complete every remaining slot?
+    if (spent + p.price + minToComplete(newFilled) > budget) continue;
 
     squad.push(p);
     filled[p.pos]++;
@@ -190,7 +203,7 @@ export function optimiseSquad(enrichedPlayers, budget = 100) {
     spent += p.price;
   }
 
-  // Fallback: fill any remaining mandatory slots with cheapest valid player
+  // Safety net: fill any slots the look-ahead guard couldn't reach
   for (const [pos, required] of Object.entries(SLOTS)) {
     while (filled[pos] < required) {
       const candidate = enrichedPlayers
@@ -207,6 +220,40 @@ export function optimiseSquad(enrichedPlayers, budget = 100) {
       filled[pos]++;
       countryCounts[candidate.team] = (countryCounts[candidate.team] ?? 0) + 1;
       spent += candidate.price;
+    }
+  }
+
+  // Phase 2 — iterative upgrade-swap pass.
+  // After the greedy pass there may be budget slack; spend it on better players
+  // in the same position until no improving swap exists.
+  let improved = true;
+  while (improved) {
+    improved = false;
+    for (let i = 0; i < squad.length; i++) {
+      const current = squad[i];
+      const slack   = budget - spent + current.price; // budget available if we drop current
+
+      const tempCountry = { ...countryCounts };
+      tempCountry[current.team]--;
+
+      const upgrade = enrichedPlayers
+        .filter(p =>
+          p.pos === current.pos &&
+          !squad.includes(p) &&
+          p.price <= slack &&
+          (p.xptsTotal ?? 0) > (current.xptsTotal ?? 0) &&
+          (tempCountry[p.team] ?? 0) < 3
+        )
+        .sort((a, b) => (b.xptsTotal ?? 0) - (a.xptsTotal ?? 0))[0];
+
+      if (upgrade) {
+        countryCounts[current.team]--;
+        countryCounts[upgrade.team] = (countryCounts[upgrade.team] ?? 0) + 1;
+        spent        = spent - current.price + upgrade.price;
+        squad[i]     = upgrade;
+        improved     = true;
+        break; // restart after each swap to re-evaluate all slots
+      }
     }
   }
 
