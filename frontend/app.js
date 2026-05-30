@@ -61,6 +61,11 @@ const state = {
   lbToken:        (() => { try { return localStorage.getItem('wc26-lb-token'); } catch { return null; } })(),
   lbUser:         null,
   lbData:         null,
+  myGroupPicks:   null,   // { A:[id,id,id,id], ... }
+  myThirdPicks:   null,   // array of 8 group letters whose 3rd-place team advances
+  myR32Pairs:     null,   // [[teamA,teamB], ...] 16 pairs
+  bracketPicks:   null,   // { r32:[...16], r16:[...8], qf:[...4], sf:[...2], champion:null }
+  bcStep:         null,   // null|'groups'|'thirds'|'r32'|'r16'|'qf'|'sf'|'final'
 };
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -2051,6 +2056,446 @@ function initHistoryView() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// BRACKET CREATOR
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Official WC 2026 R32 bracket structure ────────────────────────────────
+
+const R32_DEFS = [
+  { id:73, aType:'runner-up', aGroup:'A', bType:'runner-up', bGroup:'B' },
+  { id:74, aType:'winner',    aGroup:'E', bType:'third',     bSlot:0 },
+  { id:75, aType:'winner',    aGroup:'F', bType:'runner-up', bGroup:'C' },
+  { id:76, aType:'winner',    aGroup:'C', bType:'runner-up', bGroup:'F' },
+  { id:77, aType:'winner',    aGroup:'I', bType:'third',     bSlot:1 },
+  { id:78, aType:'runner-up', aGroup:'E', bType:'runner-up', bGroup:'I' },
+  { id:79, aType:'winner',    aGroup:'A', bType:'third',     bSlot:2 },
+  { id:80, aType:'winner',    aGroup:'L', bType:'third',     bSlot:3 },
+  { id:81, aType:'winner',    aGroup:'D', bType:'third',     bSlot:4 },
+  { id:82, aType:'winner',    aGroup:'G', bType:'third',     bSlot:5 },
+  { id:83, aType:'runner-up', aGroup:'K', bType:'runner-up', bGroup:'L' },
+  { id:84, aType:'winner',    aGroup:'H', bType:'runner-up', bGroup:'J' },
+  { id:85, aType:'winner',    aGroup:'B', bType:'third',     bSlot:6 },
+  { id:86, aType:'winner',    aGroup:'J', bType:'runner-up', bGroup:'H' },
+  { id:87, aType:'winner',    aGroup:'K', bType:'third',     bSlot:7 },
+  { id:88, aType:'runner-up', aGroup:'D', bType:'runner-up', bGroup:'G' },
+];
+
+// 3rd-place slot → eligible groups (from FIFA official bracket / Annex C cluster rules)
+const THIRD_SLOTS = [
+  { matchId:74, eligible:['A','B','C','D','F'] },
+  { matchId:77, eligible:['C','D','F','G','H'] },
+  { matchId:79, eligible:['C','E','F','H','I'] },
+  { matchId:80, eligible:['E','H','I','J','K'] },
+  { matchId:81, eligible:['B','E','F','I','J'] },
+  { matchId:82, eligible:['A','E','H','I','J'] },
+  { matchId:85, eligible:['E','F','G','I','J'] },
+  { matchId:87, eligible:['D','E','I','J','L'] },
+];
+
+// Subsequent round pairings (indices into previous round's winner array)
+const R16_FROM_R32 = [[1,4],[0,2],[3,5],[6,7],[10,11],[8,9],[13,15],[12,14]];
+const QF_FROM_R16  = [[0,1],[4,5],[2,3],[6,7]];
+const SF_FROM_QF   = [[0,2],[1,3]];
+
+const BC_ROUNDS    = ['r32','r16','qf','sf','final'];
+const BC_ROUND_LABELS = () => ({
+  r32:   t('bcStepR32'),
+  r16:   t('bcStepR16'),
+  qf:    t('bcStepQF'),
+  sf:    t('bcStepSF'),
+  final: t('bcStepFinal'),
+});
+
+// ── Constraint-based 3rd-place assignment ─────────────────────────────────
+// Backtracking bipartite matching respecting Annex C cluster eligibility.
+function thirdPlaceAssign(qualifyingGroups) {
+  const qSet    = new Set(qualifyingGroups);
+  const options = THIRD_SLOTS.map(s => s.eligible.filter(g => qSet.has(g)));
+  const result  = new Array(8).fill(null);
+  const used    = new Set();
+  // Process most-constrained slots first
+  const order   = options.map((o, i) => ({ i, n: o.length }))
+    .sort((a, b) => a.n - b.n).map(x => x.i);
+
+  function bt(step) {
+    if (step === 8) return true;
+    const si = order[step];
+    for (const g of options[si]) {
+      if (!used.has(g)) {
+        result[si] = g; used.add(g);
+        if (bt(step + 1)) return true;
+        used.delete(g); result[si] = null;
+      }
+    }
+    return false;
+  }
+  bt(0);
+  return result; // result[slotIndex] = group letter
+}
+
+function defaultGroupPicks() {
+  const picks = {};
+  for (const group of 'ABCDEFGHIJKL'.split('')) {
+    const teams = state.teams.filter(tm => tm.group === group);
+    if (state.simResults?.groups?.[group]) {
+      const gd = state.simResults.groups[group];
+      picks[group] = [...teams]
+        .sort((a, b) => (gd[b.id]?.p1st ?? 0) - (gd[a.id]?.p1st ?? 0))
+        .map(tm => tm.id);
+    } else {
+      picks[group] = [...teams]
+        .sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0))
+        .map(tm => tm.id);
+    }
+  }
+  return picks;
+}
+
+function buildR32Pairs(groupPicks) {
+  const pos = (group, idx) => groupPicks[group]?.[idx] ?? null; // 0=1st 1=2nd 2=3rd
+
+  const thirdByGroup = Object.fromEntries(
+    'ABCDEFGHIJKL'.split('').map(g => [g, pos(g, 2)])
+  );
+
+  // Use user's explicit third-place picks; fall back to model ranking if not set
+  const chosen8 = state.myThirdPicks?.length === 8
+    ? state.myThirdPicks
+    : (() => {
+        const thirds = 'ABCDEFGHIJKL'.split('').map(g => ({
+          group: g, prob: teamProbs(pos(g, 2))?.winner ?? 0,
+        }));
+        return [...thirds].sort((a, b) => b.prob - a.prob).slice(0, 8).map(t => t.group);
+      })();
+
+  const slotAssign = thirdPlaceAssign(chosen8);
+
+  return R32_DEFS.map(def => {
+    const a = def.aType === 'winner'    ? pos(def.aGroup, 0)
+            : def.aType === 'runner-up' ? pos(def.aGroup, 1)
+            : null;
+    const b = def.bType === 'winner'    ? pos(def.bGroup, 0)
+            : def.bType === 'runner-up' ? pos(def.bGroup, 1)
+            : def.bType === 'third'     ? (thirdByGroup[slotAssign[def.bSlot]] ?? null)
+            : null;
+    return [a, b];
+  });
+}
+
+function getRoundPairs(round) {
+  const bp = state.bracketPicks;
+  if (round === 'r32')   return state.myR32Pairs ?? [];
+  if (round === 'r16')   return R16_FROM_R32.map(([a,b]) => [bp.r32[a], bp.r32[b]]);
+  if (round === 'qf')    return QF_FROM_R16.map(([a,b])  => [bp.r16[a], bp.r16[b]]);
+  if (round === 'sf')    return SF_FROM_QF.map(([a,b])   => [bp.qf[a],  bp.qf[b]]);
+  if (round === 'final') return [[bp.sf[0], bp.sf[1]]];
+  return [];
+}
+
+function bcShowNormal(show) {
+  document.getElementById('lb-normal').style.display       = show ? '' : 'none';
+  document.getElementById('bracket-creator').style.display = show ? 'none' : '';
+}
+
+// ── Step: Group Picker ────────────────────────────────────────────────────
+
+function renderGroupPickerStep() {
+  bcShowNormal(false);
+  const wrap = document.getElementById('bracket-creator');
+
+  const posLabels = [t('bcGroupWinner'), t('bcGroupRunnerUp'), t('bcGroupThird'), t('bcGroupFourth')];
+  const posClass  = ['bc-pos-1st','bc-pos-2nd','bc-pos-3rd','bc-pos-4th'];
+
+  const groupCards = 'ABCDEFGHIJKL'.split('').map(group => {
+    const teams = state.myGroupPicks[group];
+    const rows = teams.map((id, idx) => `
+      <div class="bc-group-row" data-group="${group}" data-idx="${idx}">
+        <span class="bc-pos ${posClass[idx]}">${posLabels[idx]}</span>
+        ${flag(id)}
+        <span class="bc-team-name">${getTeamName(id)}</span>
+        <div class="bc-row-btns">
+          <button class="bc-arr" data-dir="-1" data-group="${group}" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+          <button class="bc-arr" data-dir="1"  data-group="${group}" data-idx="${idx}" ${idx === 3 ? 'disabled' : ''}>↓</button>
+        </div>
+      </div>`).join('');
+
+    return `
+      <div class="bc-group-card">
+        <div class="bc-group-header">
+          <span class="bc-group-label">${t('thGrp')} ${group}</span>
+          <button class="bc-reset-group btn-secondary btn-sm" data-group="${group}">${t('bcResetModel')}</button>
+        </div>
+        ${rows}
+      </div>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="bc-header">
+      ${bcStepBar('groups')}
+    </div>
+    <h2 class="bc-title">${t('bcGroupsTitle')}</h2>
+    <p class="bc-desc">${t('bcGroupsDesc')}</p>
+    <div class="bc-groups-grid">${groupCards}</div>
+    <div class="bc-footer">
+      <button class="btn-secondary" id="bc-cancel">${t('lbSignOut').replace('Sign out','Cancel')}</button>
+      <button class="btn-primary"   id="bc-gen-bracket">${t('bcGenBracket')}</button>
+    </div>`;
+
+  // Arrow button clicks
+  wrap.querySelectorAll('.bc-arr').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const group = btn.dataset.group;
+      const idx   = parseInt(btn.dataset.idx);
+      const dir   = parseInt(btn.dataset.dir);
+      const arr   = state.myGroupPicks[group];
+      const swap  = idx + dir;
+      if (swap < 0 || swap > 3) return;
+      [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
+      renderGroupPickerStep();
+    });
+  });
+
+  // Reset group to model
+  wrap.querySelectorAll('.bc-reset-group').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const group = btn.dataset.group;
+      state.myGroupPicks[group] = defaultGroupPicks()[group];
+      renderGroupPickerStep();
+    });
+  });
+
+  document.getElementById('bc-cancel').addEventListener('click', () => {
+    state.bcStep = null;
+    bcShowNormal(true);
+    renderLeaderboardTab();
+  });
+
+  document.getElementById('bc-gen-bracket').addEventListener('click', () => {
+    state.myThirdPicks = null; // reset so thirds step starts fresh
+    state.bcStep = 'thirds';
+    renderThirdPickerStep();
+  });
+}
+
+// ── Step: Third-Place Picker ──────────────────────────────────────────────
+
+function renderThirdPickerStep() {
+  bcShowNormal(false);
+  const wrap = document.getElementById('bracket-creator');
+
+  // Pre-populate with model's best 8 on first visit
+  if (!state.myThirdPicks) {
+    const thirds = 'ABCDEFGHIJKL'.split('').map(g => ({
+      group: g, prob: teamProbs(state.myGroupPicks[g]?.[2])?.winner ?? 0,
+    }));
+    state.myThirdPicks = [...thirds].sort((a, b) => b.prob - a.prob)
+      .slice(0, 8).map(t => t.group);
+  }
+
+  const picked   = new Set(state.myThirdPicks);
+  const n        = picked.size;
+  const allDone  = n === 8;
+
+  const teamCards = 'ABCDEFGHIJKL'.split('').map(group => {
+    const id       = state.myGroupPicks[group]?.[2];
+    const isPicked = picked.has(group);
+    const disabled = !isPicked && n >= 8;
+    return `<button class="bc-third-btn${isPicked ? ' bc-third-picked' : ''}"
+                    data-group="${group}" ${disabled ? 'disabled' : ''}>
+      <span class="bc-group-badge">${t('bcGroupThird')} ${t('thGrp')} ${group}</span>
+      <div class="bc-third-team">${flag(id)}<span>${getTeamName(id)}</span></div>
+    </button>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="bc-header">${bcStepBar('thirds')}</div>
+    <h2 class="bc-title">${t('bcThirdsTitle')}</h2>
+    <p class="bc-desc">${t('bcThirdsDesc', n)}</p>
+    <div class="bc-thirds-grid">${teamCards}</div>
+    <div class="bc-footer">
+      <button class="btn-secondary" id="bc-back">${t('bcBackRound')}</button>
+      <button class="btn-primary" id="bc-gen-r32" ${!allDone ? 'disabled' : ''}>${t('bcGenBracket')}</button>
+    </div>`;
+
+  wrap.querySelectorAll('.bc-third-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const group = btn.dataset.group;
+      if (picked.has(group)) {
+        picked.delete(group);
+      } else if (picked.size < 8) {
+        picked.add(group);
+      }
+      state.myThirdPicks = [...picked];
+      renderThirdPickerStep();
+    });
+  });
+
+  document.getElementById('bc-back').addEventListener('click', () => {
+    state.bcStep = 'groups';
+    renderGroupPickerStep();
+  });
+
+  document.getElementById('bc-gen-r32').addEventListener('click', () => {
+    state.myR32Pairs   = buildR32Pairs(state.myGroupPicks);
+    state.bracketPicks = {
+      r32:   Array(16).fill(null), r16: Array(8).fill(null),
+      qf:    Array(4).fill(null),  sf:  Array(2).fill(null),
+      final: Array(1).fill(null),
+      champion: null, r32Pairs: state.myR32Pairs, myThirdPicks: state.myThirdPicks,
+    };
+    state.bcStep = 'r32';
+    renderBracketRoundStep();
+  });
+}
+
+// ── Step bar ──────────────────────────────────────────────────────────────
+
+function bcStepBar(current) {
+  const steps = [
+    ['groups', t('bcStepGroups')],
+    ['thirds', t('bcStepThirds')],
+    ['r32',    t('bcStepR32')],
+    ['r16',    t('bcStepR16')],
+    ['qf',     t('bcStepQF')],
+    ['sf',     t('bcStepSF')],
+    ['final',  t('bcStepFinal')],
+  ];
+  const currentIdx = steps.findIndex(([k]) => k === current);
+  return `<div class="bc-step-bar">${steps.map(([k, label], i) => `
+    <span class="bc-step${i === currentIdx ? ' bc-step-active' : i < currentIdx ? ' bc-step-done' : ''}">${label}</span>
+    ${i < steps.length - 1 ? '<span class="bc-step-sep">›</span>' : ''}
+  `).join('')}</div>`;
+}
+
+// ── Step: Bracket Round ───────────────────────────────────────────────────
+
+function renderBracketRoundStep() {
+  bcShowNormal(false);
+  const wrap  = document.getElementById('bracket-creator');
+  const round = state.bcStep;
+  const pairs = getRoundPairs(round);
+  const picks = state.bracketPicks[round];
+  const labels = BC_ROUND_LABELS();
+  const done  = picks.filter(w => w !== null).length;
+  const total = picks.length;
+  const allDone = done === total;
+
+  const matchCards = pairs.map(([tA, tB], i) => {
+    const winA = picks[i] === tA;
+    const winB = picks[i] === tB;
+    const teamBtn = (id, won) => id
+      ? `<button class="bc-team-btn${won ? ' bc-team-picked' : ''}" data-round="${round}" data-idx="${i}" data-team="${id}">
+           ${flag(id)}<span>${getTeamName(id)}</span>
+         </button>`
+      : `<button class="bc-team-btn bc-team-tbd" disabled>TBD</button>`;
+    return `
+      <div class="bc-match-card${picks[i] ? ' bc-match-done' : ''}">
+        <div class="bc-match-label">${t('bcMatch', round === 'r32' ? R32_DEFS[i].id : 73 + BC_ROUNDS.indexOf(round) * 8 + i)}</div>
+        ${teamBtn(tA, winA)}
+        <div class="bc-vs">vs</div>
+        ${teamBtn(tB, winB)}
+      </div>`;
+  }).join('');
+
+  const isFirst = round === 'r32';
+  const isLast  = round === 'final';
+
+  wrap.innerHTML = `
+    <div class="bc-header">
+      ${bcStepBar(round)}
+    </div>
+    <div class="bc-round-header">
+      <h2 class="bc-title">${labels[round]}</h2>
+      <span class="bc-picks-count${allDone ? ' bc-picks-all' : ''}">${
+        allDone ? t('bcPicksAll', total) : t('bcPicksRemaining', done, total)
+      }</span>
+    </div>
+    <div class="bc-matches-grid${round === 'final' ? ' bc-matches-single' : ''}">${matchCards}</div>
+    <div class="bc-footer">
+      <button class="btn-secondary" id="bc-back">${t('bcBackRound')}</button>
+      ${!isLast
+        ? `<button class="btn-primary" id="bc-next" ${!allDone ? 'disabled' : ''}>${t('bcNextRound')}</button>`
+        : allDone
+          ? `<div class="bc-champion-reveal">${flag(picks[0])}<span class="bc-champion-name">${getTeamName(picks[0])}</span><span class="bc-champion-label">${t('bcChampionLabel')}</span></div>
+             <button class="btn-primary" id="bc-save-bracket">${t('bcSaveBracket')}</button>`
+          : ''
+      }
+    </div>`;
+
+  // Team pick clicks
+  wrap.querySelectorAll('.bc-team-btn[data-team]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { round: r, idx, team } = btn.dataset;
+      state.bracketPicks[r][parseInt(idx)] = team;
+      // Invalidate later rounds
+      const ri = BC_ROUNDS.indexOf(r);
+      for (let j = ri + 1; j < BC_ROUNDS.length; j++) {
+        const lr = BC_ROUNDS[j];
+        state.bracketPicks[lr] = state.bracketPicks[lr].map(() => null);
+      }
+      state.bracketPicks.champion = null;
+      renderBracketRoundStep();
+    });
+  });
+
+  document.getElementById('bc-back')?.addEventListener('click', () => {
+    const ri = BC_ROUNDS.indexOf(round);
+    if (ri === 0) {
+      state.bcStep = 'thirds';
+      renderThirdPickerStep();
+    } else {
+      state.bcStep = BC_ROUNDS[ri - 1];
+      renderBracketRoundStep();
+    }
+  });
+
+  document.getElementById('bc-next')?.addEventListener('click', () => {
+    if (round === 'final') return;
+    // For final, champion = picks[0]
+    const ri = BC_ROUNDS.indexOf(round);
+    state.bcStep = BC_ROUNDS[ri + 1];
+    renderBracketRoundStep();
+  });
+
+  document.getElementById('bc-save-bracket')?.addEventListener('click', async () => {
+    const btn = document.getElementById('bc-save-bracket');
+    const bp  = state.bracketPicks;
+    const champion = bp.final[0];
+    bp.champion = champion;
+
+    // Extract winner/finalist/semiFinals for leaderboard
+    const finalist   = bp.sf.find(id => id !== champion);
+    const semiFinals = bp.qf.filter(id => id && id !== champion && id !== finalist).slice(0, 2);
+    const picks      = { winner: champion, finalist, semiFinals, bracket: bp };
+
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const res = await fetch('/api/leaderboard/picks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...lbAuthHeader() },
+        body: JSON.stringify({ picks }),
+      });
+      if (res.ok) {
+        state.lbUser.picks = picks;
+        btn.textContent = t('bcBracketSaved');
+        await lbFetchLeaderboard();
+        setTimeout(() => {
+          state.bcStep = null;
+          bcShowNormal(true);
+          renderLeaderboardTab();
+        }, 1200);
+      } else {
+        btn.textContent = t('statusFailed'); btn.disabled = false;
+      }
+    } catch { btn.textContent = t('statusFailed'); btn.disabled = false; }
+  });
+}
+
+function initBracketCreator() {
+  // Nothing to wire — all event listeners are attached at render time
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // LEADERBOARD TAB
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -2175,9 +2620,26 @@ function renderLbRegistration(container) {
 }
 
 function renderLbPicks(container) {
-  const user   = state.lbUser;
-  const picks  = user?.picks ?? {};
-  const mp     = getModelPicks();
+  const user  = state.lbUser;
+  const picks = user?.picks ?? {};
+  const mp    = getModelPicks();
+
+  const picksSummary = picks.winner
+    ? `<div class="lb-picks-summary">
+         <div class="lb-pick-summary-row">
+           <span class="lb-pick-summary-label">${t('lbPickWinner')}</span>
+           ${flag(picks.winner)} <strong>${getTeamName(picks.winner)}</strong>
+         </div>
+         ${picks.finalist ? `<div class="lb-pick-summary-row">
+           <span class="lb-pick-summary-label">${t('lbPickFinalist')}</span>
+           ${flag(picks.finalist)} ${getTeamName(picks.finalist)}
+         </div>` : ''}
+         ${(picks.semiFinals ?? []).length ? `<div class="lb-pick-summary-row">
+           <span class="lb-pick-summary-label">${t('lbThSF')}</span>
+           ${picks.semiFinals.map(id => `${flag(id)} ${getTeamName(id)}`).join(' &nbsp;·&nbsp; ')}
+         </div>` : ''}
+       </div>`
+    : `<p class="lb-card-desc">${t('bcNoPicksYet')}</p>`;
 
   container.innerHTML = `
     <div class="lb-card">
@@ -2186,73 +2648,33 @@ function renderLbPicks(container) {
         <span class="lb-score-badge">${t('lbScore', user.totalScore)}</span>
         <button class="btn-secondary btn-sm lb-signout-btn" id="lb-signout">${t('lbSignOut')}</button>
       </div>
-      <h3 class="lb-card-title">${t('lbYourPicks')}</h3>
       ${mp ? `<p class="lb-model-hint">💡 ${t('lbModelHint', getTeamName(mp.winner))}</p>` : ''}
       <p class="lb-scoring-note">${t('lbScoringNote')}</p>
-      <div class="lb-picks-grid">
-        <label class="lb-pick-label">${t('lbPickWinner')}</label>
-        <select id="lb-pick-winner" class="lb-select">
-          <option value="">— ${t('lbPickChoose')} —</option>
-          ${lbTeamOptions(picks.winner)}
-        </select>
-        <label class="lb-pick-label">${t('lbPickFinalist')}</label>
-        <select id="lb-pick-finalist" class="lb-select">
-          <option value="">— ${t('lbPickChoose')} —</option>
-          ${lbTeamOptions(picks.finalist)}
-        </select>
-        <label class="lb-pick-label">${t('lbPickSF1')}</label>
-        <select id="lb-pick-sf1" class="lb-select">
-          <option value="">— ${t('lbPickChoose')} —</option>
-          ${lbTeamOptions(picks.semiFinals?.[0])}
-        </select>
-        <label class="lb-pick-label">${t('lbPickSF2')}</label>
-        <select id="lb-pick-sf2" class="lb-select">
-          <option value="">— ${t('lbPickChoose')} —</option>
-          ${lbTeamOptions(picks.semiFinals?.[1])}
-        </select>
-      </div>
-      <div class="lb-picks-actions">
-        <button class="btn-primary" id="lb-save-btn">${t('lbSavePicks')}</button>
-        <span id="lb-save-status" class="lb-save-status"></span>
-      </div>
+      ${picks.winner ? `<h3 class="lb-card-title">${t('bcBracketExists')}</h3>` : ''}
+      ${picksSummary}
+      <button class="btn-primary" id="lb-open-bracket">${picks.winner ? t('bcEditBtn') : t('bcCreateBtn')}</button>
     </div>`;
 
   document.getElementById('lb-signout').addEventListener('click', () => {
     state.lbToken = null; state.lbUser = null;
     try { localStorage.removeItem('wc26-lb-token'); } catch {}
+    state.bcStep = null;
     renderLeaderboardTab();
   });
 
-  document.getElementById('lb-save-btn').addEventListener('click', async () => {
-    const btn    = document.getElementById('lb-save-btn');
-    const status = document.getElementById('lb-save-status');
-    const winner   = document.getElementById('lb-pick-winner').value;
-    const finalist = document.getElementById('lb-pick-finalist').value;
-    const sf1      = document.getElementById('lb-pick-sf1').value;
-    const sf2      = document.getElementById('lb-pick-sf2').value;
-    if (!winner) { status.textContent = t('lbPickRequired'); return; }
-    const selected = [winner, finalist, sf1, sf2].filter(Boolean);
-    if (new Set(selected).size !== selected.length) {
-      status.textContent = t('lbPickNoDupes'); return;
+  document.getElementById('lb-open-bracket').addEventListener('click', () => {
+    state.myGroupPicks  = defaultGroupPicks();
+    state.myThirdPicks  = null;
+    // Restore bracket picks from saved bracket if available
+    if (picks.bracket) {
+      state.bracketPicks = picks.bracket;
+      // Ensure saved brackets have the final array (back-compat with older saves)
+      if (!state.bracketPicks.final) state.bracketPicks.final = Array(1).fill(null);
+      state.myR32Pairs   = state.bracketPicks.r32Pairs ?? buildR32Pairs(state.myGroupPicks);
+      state.myThirdPicks = state.bracketPicks.myThirdPicks ?? null;
     }
-    const newPicks = { winner, finalist: finalist || null, semiFinals: [sf1, sf2].filter(Boolean) };
-    btn.disabled = true; status.textContent = '';
-    try {
-      const res = await fetch('/api/leaderboard/picks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...lbAuthHeader() },
-        body: JSON.stringify({ picks: newPicks }),
-      });
-      if (res.ok) {
-        state.lbUser.picks = newPicks;
-        status.textContent = t('lbPicksSaved');
-        await lbFetchLeaderboard();
-        renderLbTable(document.getElementById('lb-table-section'));
-      } else {
-        status.textContent = t('statusFailed');
-      }
-    } catch { status.textContent = t('statusFailed'); }
-    finally { btn.disabled = false; }
+    state.bcStep = 'groups';
+    renderGroupPickerStep();
   });
 }
 
