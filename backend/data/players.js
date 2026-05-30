@@ -120,12 +120,12 @@ export const PLAYERS = [
   { id:'BIH_DEF_5',team:'BIH', name:'Amar Ramic',             pos:'DEF', price:3.8 },
   { id:'BIH_MID_1',team:'BIH', name:'Miralem Pjanic',         pos:'MID', price:5.5 },
   { id:'BIH_MID_2',team:'BIH', name:'Amar Memic',             pos:'MID', price:4.7 },
-  { id:'BIH_MID_3',team:'BIH', name:'Ermedin Demirovic',      pos:'MID', price:5.8 },
+  { id:'BIH_MID_3',team:'BIH', name:'Amer Gojak',             pos:'MID', price:5.5 },
   { id:'BIH_MID_4',team:'BIH', name:'Nikola Juric',           pos:'MID', price:4.5 },
   { id:'BIH_MID_5',team:'BIH', name:'Armin Hodzic',           pos:'MID', price:4.8 },
   { id:'BIH_FWD_1',team:'BIH', name:'Edin Dzeko',             pos:'FWD', price:6.0 },
   { id:'BIH_FWD_2',team:'BIH', name:'Jasmin Mujezinovic',     pos:'FWD', price:5.0 },
-  { id:'BIH_FWD_3',team:'BIH', name:'Amer Gojak',             pos:'FWD', price:5.5 },
+  { id:'BIH_FWD_3',team:'BIH', name:'Ermedin Demirovic',      pos:'FWD', price:5.8 },
 
   // QAT
   { id:'QAT_GK_1', team:'QAT', name:'Meshaal Barsham',        pos:'GK',  price:4.0 },
@@ -327,19 +327,19 @@ export const PLAYERS = [
   { id:'CIV_DEF_2',team:'CIV', name:'Eric Bailly',            pos:'DEF', price:4.5 },
   { id:'CIV_DEF_3',team:'CIV', name:'Ghislain Konan',         pos:'DEF', price:4.3 },
   { id:'CIV_DEF_4',team:'CIV', name:'Simon Deli',             pos:'DEF', price:4.0 },
-  { id:'CIV_DEF_5',team:'CIV', name:'Wilfried Singo',         pos:'DEF', price:4.5 },
+  { id:'CIV_DEF_5',team:'CIV', name:'Serge Aurier',            pos:'DEF', price:4.5 },
   { id:'CIV_MID_1',team:'CIV', name:'Franck Kessie',          pos:'MID', price:6.5 },
   { id:'CIV_MID_2',team:'CIV', name:'Seko Fofana',            pos:'MID', price:6.0 },
   { id:'CIV_MID_3',team:'CIV', name:'Ibrahim Sangare',        pos:'MID', price:5.8 },
   { id:'CIV_MID_4',team:'CIV', name:'Oumar Diakite',          pos:'MID', price:4.8 },
-  { id:'CIV_MID_5',team:'CIV', name:'Serge Aurier',           pos:'MID', price:4.5 },
+  { id:'CIV_MID_5',team:'CIV', name:'Wilfried Singo',         pos:'MID', price:4.5 },
   { id:'CIV_FWD_1',team:'CIV', name:'Nicolas Pepe',           pos:'FWD', price:5.5 },
   { id:'CIV_FWD_2',team:'CIV', name:'Jonathan Kodjia',        pos:'FWD', price:5.0 },
   { id:'CIV_FWD_3',team:'CIV', name:'Simon Adingra',          pos:'FWD', price:6.0 },
 
   // CUW
   { id:'CUW_GK_1', team:'CUW', name:'Eloy Room',              pos:'GK',  price:4.0 },
-  { id:'CUW_GK_2', team:'CUW', name:'Cuco Martina',           pos:'GK',  price:3.7 },
+  { id:'CUW_GK_2', team:'CUW', name:'Cody Corstjens',          pos:'GK',  price:3.7 },
   { id:'CUW_DEF_1',team:'CUW', name:'Etienne Reijnen',        pos:'DEF', price:3.8 },
   { id:'CUW_DEF_2',team:'CUW', name:'Vurnon Anita',           pos:'DEF', price:3.8 },
   { id:'CUW_DEF_3',team:'CUW', name:'Jurien Gaari',           pos:'DEF', price:3.7 },
@@ -602,7 +602,7 @@ export const PLAYERS = [
 
   // NOR
   { id:'NOR_GK_1', team:'NOR', name:'Orjan Nyland',           pos:'GK',  price:4.2 },
-  { id:'NOR_GK_2', team:'NOR', name:'Ørjan Nyland',           pos:'GK',  price:3.8 },
+  { id:'NOR_GK_2', team:'NOR', name:'Sondre Rossbach',         pos:'GK',  price:3.8 },
   { id:'NOR_DEF_1',team:'NOR', name:'David Moller Wolfe',     pos:'DEF', price:4.0 },
   { id:'NOR_DEF_2',team:'NOR', name:'Kristoffer Ajer',        pos:'DEF', price:4.3 },
   { id:'NOR_DEF_3',team:'NOR', name:'Leo Ostigard',           pos:'DEF', price:4.1 },
@@ -772,7 +772,7 @@ export const PLAYERS = [
   { id:'UZB_MID_5',team:'UZB', name:'Jaloliddin Masharipov',  pos:'MID', price:5.5 },
   { id:'UZB_FWD_1',team:'UZB', name:'Eldor Shomurodov',       pos:'FWD', price:6.0 },
   { id:'UZB_FWD_2',team:'UZB', name:'Bobur Abdixoliqov',      pos:'FWD', price:4.5 },
-  { id:'UZB_FWD_3',team:'UZB', name:'Dostonbek Khamdamov',    pos:'FWD', price:4.5 },
+  { id:'UZB_FWD_3',team:'UZB', name:'Temurkhuja Abdukholiqov', pos:'FWD', price:4.5 },
 
   // ═══ GROUP L — ENG CRO GHA PAN ══════════════════════════════════════════════
 
