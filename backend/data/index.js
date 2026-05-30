@@ -41,7 +41,7 @@ export async function refreshAll() {
 }
 
 // Pre-warm all caches and print a sample when run directly
-if (process.argv[1].endsWith('index.js')) {
+if (process.argv[1]?.endsWith('index.js')) {
   console.log('Pre-warming data cache...\n');
   loadAll().then(({ teams, fixtures, matches, elo, form, squadStats }) => {
     console.log(`  Teams:    ${teams.length}`);

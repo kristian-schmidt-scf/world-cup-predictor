@@ -25,6 +25,7 @@
         <button class="tab-btn"        data-tab="scenario" data-i18n="tabScenario">Scenario</button>
         <button class="tab-btn"        data-tab="history"     data-i18n="tabHistory">History</button>
         <button class="tab-btn"        data-tab="leaderboard" data-i18n="tabLeaderboard">Leaderboard</button>
+        <button class="tab-btn"        data-tab="fantasy"     data-i18n="tabFantasy">Fantasy</button>
       </nav>
       <div class="sim-status" id="sim-status"></div>
       <button id="lang-btn" class="lang-btn" title="Switch language / Sprache wechseln">DE</button>
@@ -215,6 +216,56 @@
     <div id="lb-normal" class="lb-layout">
       <div class="lb-left"  id="lb-user-section"></div>
       <div class="lb-right" id="lb-table-section"></div>
+    </div>
+  </div>
+
+  <!-- ── FANTASY ──────────────────────────────────────────────────────────── -->
+  <div id="tab-fantasy" class="tab-pane">
+    <div class="fantasy-toolbar">
+      <h2 data-i18n="fantasyTitle">Fantasy XI</h2>
+      <div class="pill-tabs" id="fantasy-pill-tabs">
+        <button class="pill-tab active" data-view="builder"  data-i18n="fantasyBuilder">Squad Builder</button>
+        <button class="pill-tab"        data-view="myteam"   data-i18n="fantasyMyTeam">My Team</button>
+        <button class="pill-tab"        data-view="optimise" data-i18n="fantasyOptimise">Optimise</button>
+      </div>
+    </div>
+
+    <!-- Sub-view: Squad Builder -->
+    <div id="fantasy-view-builder" class="fantasy-view active">
+      <div class="fantasy-builder-layout">
+        <div class="fantasy-browser-panel">
+          <div id="fantasy-filters" class="fantasy-browser-filters"></div>
+          <div id="fantasy-budget-bar" class="fantasy-budget-bar"></div>
+          <div class="table-wrap">
+            <table class="data-table" id="fantasy-players-table">
+              <thead>
+                <tr>
+                  <th data-i18n="fthPos">Pos</th>
+                  <th data-i18n="fthTeam">Team</th>
+                  <th data-i18n="fthName">Player</th>
+                  <th data-sort="price" data-i18n="fthPrice">Price</th>
+                  <th data-sort="xpts"  data-i18n="fthXpts">xPts</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="fantasy-players-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="fantasy-pitch-panel" id="fantasy-pitch">
+          <div class="pitch-empty-msg" data-i18n="fantasyPitchEmpty">Your pitch will appear here</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-view: My Team / Projections -->
+    <div id="fantasy-view-myteam" class="fantasy-view">
+      <div id="fantasy-myteam-content"></div>
+    </div>
+
+    <!-- Sub-view: Optimise -->
+    <div id="fantasy-view-optimise" class="fantasy-view">
+      <div id="fantasy-optimise-content"></div>
     </div>
   </div>
 

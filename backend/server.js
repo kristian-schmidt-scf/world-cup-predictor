@@ -9,6 +9,7 @@ import simulateRouter from './routes/simulate.js';
 import resultsRouter  from './routes/results.js';
 import historyRouter      from './routes/history.js';
 import leaderboardRouter  from './routes/leaderboard.js';
+import fantasyRouter      from './routes/fantasy.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
@@ -35,6 +36,7 @@ app.use('/api', simulateRouter);
 app.use('/api', resultsRouter);
 app.use('/api', historyRouter);
 app.use('/api', leaderboardRouter);
+app.use('/api', fantasyRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
