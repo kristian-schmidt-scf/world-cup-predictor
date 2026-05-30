@@ -1104,9 +1104,21 @@ details[open] .gc-summary::after { content: ' ▴'; }
 .budget-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
 .budget-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
 .budget-fill-warn { background: var(--loss); }
-.slot-counts { display: flex; gap: 10px; flex-wrap: wrap; }
+.slot-counts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .slot-count { font-size: 11px; color: var(--muted); }
 .slot-count.slot-full { color: var(--win); font-weight: 700; }
+.btn-clear-squad {
+  margin-left: auto;
+  padding: 2px 10px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.btn-clear-squad:hover { color: var(--loss); border-color: var(--loss); }
 
 /* ── Player browser filters ──────────────────────────────────────────────── */
 .fantasy-browser-filters {

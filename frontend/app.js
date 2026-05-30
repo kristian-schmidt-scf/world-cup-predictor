@@ -2835,7 +2835,8 @@ function renderBudgetBar() {
   const pct   = Math.min(100, (spent / FANTASY_BUDGET) * 100);
   const tight = pct > 90;
   const slots = fantasySlotsUsed();
-  document.getElementById('fantasy-budget-bar').innerHTML = `
+  const bar   = document.getElementById('fantasy-budget-bar');
+  bar.innerHTML = `
     <div class="budget-label">
       <span>$${spent.toFixed(1)}M / $${FANTASY_BUDGET}M</span>
       <span class="budget-remaining${tight ? ' budget-tight' : ''}">$${(FANTASY_BUDGET - spent).toFixed(1)}M remaining</span>
@@ -2846,7 +2847,19 @@ function renderBudgetBar() {
         const n = slots[pos];
         return `<span class="slot-count${n === max ? ' slot-full' : ''}">${pos}: ${n}/${max}</span>`;
       }).join('')}
+      ${state.fantasy.squad.length > 0
+        ? `<button class="btn-clear-squad">${t('fantasyClearSquad')}</button>`
+        : ''}
     </div>`;
+
+  bar.querySelector('.btn-clear-squad')?.addEventListener('click', () => {
+    state.fantasy.squad     = [];
+    state.fantasy.captainId = null;
+    state.fantasy.optimised = false;
+    renderBudgetBar();
+    renderPitch();
+    renderPlayerBrowser();
+  });
 }
 
 function renderPitch() {
