@@ -6,7 +6,7 @@
 export const PLAYER_STATS = {
 
   // ── SUPERSTARS ($10–$10.5M) ───────────────────────────────────────────────
-  'BRA_FWD_1': { goalsPerMatch: 0.37, assistsPerMatch: 0.26, yellowsPerMatch: 0.11, minsPerMatch: 80 }, // Vinicius Jr
+  'BRA_MID_2': { goalsPerMatch: 0.37, assistsPerMatch: 0.26, yellowsPerMatch: 0.11, minsPerMatch: 80 }, // Vinicius Jr
   'FRA_FWD_1': { goalsPerMatch: 0.65, assistsPerMatch: 0.43, yellowsPerMatch: 0.08, minsPerMatch: 84 }, // Mbappe
   'NOR_FWD_1': { goalsPerMatch: 0.76, assistsPerMatch: 0.12, yellowsPerMatch: 0.05, minsPerMatch: 81 }, // Haaland
   'ENG_FWD_1': { goalsPerMatch: 0.74, assistsPerMatch: 0.21, yellowsPerMatch: 0.06, minsPerMatch: 85 }, // Kane

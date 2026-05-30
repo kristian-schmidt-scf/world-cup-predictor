@@ -155,11 +155,11 @@ export const PLAYERS = [
   { id:'BRA_DEF_4',team:'BRA', name:'Guilherme Arana',        pos:'DEF', price:4.3 },
   { id:'BRA_DEF_5',team:'BRA', name:'Danilo',                 pos:'DEF', price:4.5 },
   { id:'BRA_MID_1',team:'BRA', name:'Raphinha',               pos:'MID', price:8.2 },
-  { id:'BRA_MID_2',team:'BRA', name:'Gabriel Martinelli',     pos:'MID', price:6.5 },
+  { id:'BRA_MID_2',team:'BRA', name:'Vinicius Jr',            pos:'MID', price:10.5 },
   { id:'BRA_MID_3',team:'BRA', name:'Lucas Paqueta',          pos:'MID', price:7.5 },
   { id:'BRA_MID_4',team:'BRA', name:'Bruno Guimaraes',        pos:'MID', price:6.8 },
   { id:'BRA_MID_5',team:'BRA', name:'Gerson',                 pos:'MID', price:5.5 },
-  { id:'BRA_FWD_1',team:'BRA', name:'Vinicius Jr',            pos:'FWD', price:10.5 },
+  { id:'BRA_FWD_1',team:'BRA', name:'Gabriel Martinelli',     pos:'FWD', price:6.5 },
   { id:'BRA_FWD_2',team:'BRA', name:'Matheus Cunha',          pos:'FWD', price:7.3 },
   { id:'BRA_FWD_3',team:'BRA', name:'Endrick',                pos:'FWD', price:6.5 },
 
