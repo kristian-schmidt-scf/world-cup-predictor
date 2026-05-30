@@ -5,6 +5,7 @@
 import { expectedGoals, scoreMatrix } from './dixonColes.js';
 import { GROUP_FIXTURES, GROUPS, GROUP_TEAMS } from '../data/fixtures.js';
 import { get, set } from '../data/cache.js';
+import { PLAYER_STATS } from '../data/playerStats.js';
 
 const CACHE_KEY = 'fantasy_projections';
 const CACHE_TTL_H = 24;
@@ -19,10 +20,23 @@ export const SCORING = {
 };
 
 // Historical WC goal distribution by position (approximate)
-const GOAL_SHARE = { GK: 0.00, DEF: 0.08, MID: 0.25, FWD: 0.67 };
+const GOAL_SHARE  = { GK: 0.00, DEF: 0.08, MID: 0.25, FWD: 0.67 };
 const ASSIST_RATE = 0.85;   // probability an attacker's goal has an assist
-const P_APP_60   = 0.75;    // starter assumption (no lineup data available)
-const P_CARD     = 0.10;    // ~10% chance of a yellow card per player per match
+const P_CARD      = 0.10;   // fallback yellow-card rate when no individual data
+const ALPHA       = 0.60;   // weight on team model vs individual historical stats
+
+// P(plays 60+ min) — derived from minsPerMatch when individual data exists,
+// otherwise estimated from price tier (bench GKs are ~0.20, elite starters ~0.88).
+function getPApp60(player) {
+  const mins = player.stats?.minsPerMatch;
+  if (mins != null) return Math.min(0.95, Math.max(0.10, (mins - 20) / 75));
+  const { pos, price } = player;
+  if (pos === 'GK')  return price >= 5.5 ? 0.85 : price >= 4.5 ? 0.55 : 0.20;
+  if (pos === 'DEF') return price >= 5.8 ? 0.85 : price >= 4.8 ? 0.70 : 0.35;
+  if (pos === 'MID') return price >= 6.5 ? 0.85 : price >= 5.5 ? 0.72 : 0.40;
+  if (pos === 'FWD') return price >= 6.5 ? 0.85 : price >= 5.8 ? 0.72 : 0.45;
+  return 0.70;
+}
 // Expected saves per match for GKs: roughly 3–5; use opponent xG as proxy
 // Every 3 saves = +1 pt; GK saves ~= opponent xG * ~2 (shots-to-xG ratio)
 const SAVES_PER_XG = 2.0;
@@ -43,13 +57,25 @@ function pCleanSheetFor(team, opponent, params) {
 function xptsMatch(player, xgFor, xgAgainst, pCS, qualityWeight = 1) {
   const s  = SCORING[player.pos];
   const gs = GOAL_SHARE[player.pos];
+  const st = player.stats;
 
-  // qualityWeight distributes the position's goal share by player price within the team
-  const xGoals   = xgFor  * gs * qualityWeight;
-  const xAssists = xGoals * ASSIST_RATE;
-  const xCards   = P_CARD;
+  const pApp60 = getPApp60(player);
 
-  let xpts = P_APP_60 * s.app60;
+  // Team-model share of this match's xG assigned to this player
+  const modelGoals = xgFor * gs * qualityWeight;
+  // Blend model (α) with individual historical rate (1-α) when data available
+  const xGoals = st?.goalsPerMatch != null
+    ? ALPHA * modelGoals + (1 - ALPHA) * st.goalsPerMatch
+    : modelGoals;
+
+  const modelAssists = xGoals * ASSIST_RATE;
+  const xAssists = st?.assistsPerMatch != null
+    ? ALPHA * modelAssists + (1 - ALPHA) * st.assistsPerMatch
+    : modelAssists;
+
+  const xCards = st?.yellowsPerMatch ?? P_CARD;
+
+  let xpts = pApp60 * s.app60;
   xpts += xGoals   * s.goal;
   xpts += xAssists * s.assist;
   xpts -= xCards;   // yellow card deduction
@@ -154,10 +180,14 @@ export function computePlayerProjections(players, params, stageProbs) {
 
   const priceWeights = buildPriceWeights(players);
 
-  const enriched = players.map(p => ({
-    ...p,
-    ...projectPlayer(p, params, stageProbs, priceWeights[p.id] ?? 1),
-  }));
+  const enriched = players.map(p => {
+    const indivStats = PLAYER_STATS[p.id];
+    const player = indivStats ? { ...p, stats: indivStats } : p;
+    return {
+      ...player,
+      ...projectPlayer(player, params, stageProbs, priceWeights[p.id] ?? 1),
+    };
+  });
 
   set(CACHE_KEY, enriched, CACHE_TTL_H);
   return enriched;
