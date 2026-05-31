@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <clipPath id="b"><circle cx="16" cy="16" r="15.5"/></clipPath>
+    <radialGradient id="shine" cx="38%" cy="32%" r="58%">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#dde4f0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Ball with subtle blue-white gradient for a WC 2026 feel -->
+  <circle cx="16" cy="16" r="15.5" fill="url(#shine)"/>
+
+  <!-- Classic black patches, clipped to the ball -->
+  <g clip-path="url(#b)" fill="#1a1a2e">
+    <!-- Central pentagon -->
+    <polygon points="16.00,7.40 21.33,11.27 19.29,17.53 12.71,17.53 10.67,11.27"/>
+    <!-- Top -->
+    <polygon points="16.00,-2.00 20.57,1.32 18.82,6.68 13.18,6.68 11.43,1.32"/>
+    <!-- Upper-right -->
+    <polygon points="30.27,8.36 28.52,13.73 22.88,13.73 21.14,8.36 25.70,5.05"/>
+    <!-- Lower-right -->
+    <polygon points="24.82,25.14 19.17,25.14 17.43,19.77 22.00,16.45 26.56,19.77"/>
+    <!-- Lower-left -->
+    <polygon points="7.18,25.14 5.44,19.77 10.00,16.45 14.57,19.77 12.83,25.14"/>
+    <!-- Upper-left -->
+    <polygon points="1.73,8.36 6.30,5.05 10.86,8.36 9.12,13.73 3.48,13.73"/>
+  </g>
+
+  <!-- Outer ring -->
+  <circle cx="16" cy="16" r="15.5" fill="none" stroke="#1a1a2e" stroke-width="1.2"/>
+</svg>
