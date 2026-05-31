@@ -57,6 +57,8 @@ const state = {
   filter:         '',
   sort:           { col: 'elo', dir: -1 },  // dir: -1 = desc, 1 = asc
   bracketView:    'tree',
+  simModel:       'full',   // 'full' | 'dc' | 'elo'
+  modelComparison: null,    // result of /api/simulate/compare
   shareFormat:    'landscape',
   lbToken:        (() => { try { return localStorage.getItem('wc26-lb-token'); } catch { return null; } })(),
   lbUser:         null,
@@ -83,11 +85,11 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-async function simulate(numSims, scenarioLocks = {}) {
+async function simulate(numSims, scenarioLocks = {}, model = state.simModel) {
   return api('/simulate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ numSims, lockedResults: scenarioLocks }),
+    body: JSON.stringify({ numSims, lockedResults: scenarioLocks, model }),
   });
 }
 
@@ -1382,6 +1384,47 @@ function renderShareSection() {
   });
 }
 
+function renderDivergencePanel() {
+  const panel = document.getElementById('model-divergence-panel');
+  if (!panel) return;
+  const cmp = state.modelComparison;
+  if (!cmp) { panel.style.display = 'none'; return; }
+
+  const top15 = cmp.divergence.slice(0, 15);
+  const fmt   = v => (v * 100).toFixed(1) + '%';
+  const bar   = (spread) => {
+    const w = Math.min(100, (spread / 0.15) * 100).toFixed(0);
+    return `<div class="div-bar"><div class="div-bar-fill" style="width:${w}%"></div></div>`;
+  };
+
+  panel.style.display = '';
+  panel.innerHTML = `
+    <div class="divergence-header">
+      <h3>${t('modelDivergenceTitle')}</h3>
+      <p class="divergence-desc">${t('modelDivergenceDesc')} (${cmp.meta.n.toLocaleString()} sims/model)</p>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table divergence-table">
+        <thead><tr>
+          <th>${t('thTeam')}</th>
+          <th>${t('modelFull')}</th>
+          <th>${t('modelDC')}</th>
+          <th>${t('modelElo')}</th>
+          <th>${t('colSpread')}</th>
+        </tr></thead>
+        <tbody>
+          ${top15.map(d => `<tr>
+            <td><strong>${d.id}</strong></td>
+            <td>${fmt(d.full)}</td>
+            <td>${fmt(d.dc)}</td>
+            <td>${fmt(d.elo)}</td>
+            <td class="div-spread-cell">${bar(d.spread)} ${fmt(d.spread)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
 function initBracketView() {
   document.getElementById('run-sim-btn').addEventListener('click', async () => {
     const btn = document.getElementById('run-sim-btn');
@@ -1403,6 +1446,36 @@ function initBracketView() {
     } finally {
       btn.disabled = false;
       btn.textContent = t('runSim');
+    }
+  });
+
+  // Model selector
+  document.querySelectorAll('#model-selector .model-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.simModel = btn.dataset.model;
+      document.querySelectorAll('#model-selector .model-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // Compare models button
+  document.getElementById('compare-models-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('compare-models-btn');
+    btn.disabled = true;
+    btn.textContent = t('comparingModels');
+    try {
+      const data = await api('/simulate/compare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numSims: 3000 }),
+      });
+      state.modelComparison = data;
+      renderDivergencePanel();
+    } catch (err) {
+      console.error('Compare failed', err);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = t('compareModels');
     }
   });
 
