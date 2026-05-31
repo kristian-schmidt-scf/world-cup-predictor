@@ -1,13 +1,14 @@
 # World Cup 2026 Prediction Tool
 
 ## Overview
-Interactive web-based tool for predicting World Cup 2026 outcomes using hierarchical Bayesian estimation and Dixon-Coles Poisson modeling. Full Monte Carlo tournament simulation with interactive dashboard.
+Interactive web-based tool for predicting World Cup 2026 outcomes using hierarchical Bayesian estimation and Dixon-Coles Poisson modeling. Full Monte Carlo tournament simulation with interactive dashboard, Fantasy WC module, and model comparison mode.
 
 ## Prediction Scope
 - **Tournament winner**: Probability distribution over all 48 teams
 - **Group stage outcomes**: Qualification probabilities, group winner predictions
 - **Match-by-match predictions**: Expected goals, win/draw/loss probabilities, score distribution matrix
 - **Interactive scenario simulation**: "What-if" tournament bracket exploration
+- **Fantasy WC 2026**: Squad builder, per-player xPts projections, squad optimiser
 
 ## Architecture
 
@@ -22,7 +23,11 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 | `fetchMatches.js` | Fetches historical international results from martj42/international_results (GitHub CSV, no key needed); 7,294 matches since 2010 |
 | `computeElo.js` | Derives Elo ratings from match history using tournament-weighted K-factors (WC=60, qualifiers=50, friendlies=20) and goal-diff multiplier |
 | `computeForm.js` | Recent form: last 10 matches with exponential time-decay (decay rate 0.15); outputs formScore 0–100, last5 string, avg GF/GA |
+| `computeH2H.js` | Head-to-head record between any two teams from the full all-time dataset |
 | `fetchSquadStats.js` | Squad market values (€M, Transfermarkt May 2026) and avg squad ages (RotoWire) for all 48 teams |
+| `players.js` | Static: 720 fantasy players (48 teams × 15), positions and prices from official FIFA Fantasy WC 2026 |
+| `playerStats.js` | Individual international career stats for 69 players priced ≥ $7M: goalsPerMatch, assistsPerMatch, yellowsPerMatch, minsPerMatch |
+| `results.js` | Persistent locked match results (JSON file store, survives server restarts) |
 | `cache.js` | File-based JSON cache under `backend/data/cache/`; TTL per key, stale-fallback on network failure |
 | `index.js` | Unified exports; run directly to pre-warm all caches (`npm run data:fetch`) |
 
@@ -30,7 +35,8 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 - Match results: 24h TTL (re-fetched from GitHub CSV daily)
 - Elo / form: 24h TTL (recomputed from cached matches)
 - Squad stats: 30-day TTL (stable pre-tournament)
-- Fixtures / teams: static (no TTL)
+- Fantasy projections: 24h TTL (keyed `fantasy_projections`)
+- Fixtures / teams / players: static (no TTL)
 
 #### Modeling Layer (`backend/models/`)
 
@@ -42,6 +48,8 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 - Regularisation: L2 toward prior (λ_reg = 0.02) — the hierarchical pooling component
 - Home advantage: 0.1 in log-space (neutralised for all WC matches)
 - Converges in ~20 iterations (<100ms)
+- `estimateParamsDCOnly(eloRatings)` — Elo-seeded prior only, no MLE (DC-only model)
+- `getEloMap(eloRatings)` — raw Elo ratings formatted for the Elo-only simulation mode
 
 **Dixon-Coles Poisson Model** (`dixonColes.js`)
 - Per-match: score matrix P(i goals, j goals) up to 10×10
@@ -49,34 +57,70 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 - Outputs: xgA, xgB, pWin, pDraw, pLoss, scoreMatrix, mostLikelyScore
 - Fast Poisson sampler (Knuth algorithm) for Monte Carlo
 
+**Fantasy Engine** (`fantasyEngine.js`)
+- Scoring rules: official FIFA Fantasy WC 2026 points system (app60, goal, assist, cleanSheet, savePer3, goalConcededAfter1, card)
+- Goal share constants: `{ GK:0.00, DEF:0.08, MID:0.25, FWD:0.67 }`
+- Per-player appearance probability: `getPApp60(player)` — derived from `stats.minsPerMatch` via `(mins-20)/75` when individual data exists; falls back to price-tier proxy (bench GKs ~0.20, elite starters ~0.85)
+- xPts blending: `α=0.60` on team-level model × `(1-α)=0.40` on individual historical rate (when `playerStats` available)
+- Group stage: 3 fixtures per team using Dixon-Coles xG and clean-sheet probabilities
+- Knockout stage: weighted by Monte Carlo stage-reaching probabilities (r16, qf, sf, final, winner)
+- Optimiser: Phase 1 — greedy by raw xPts with look-ahead budget guard (MIN_PRICE floor); Phase 2 — iterative single-player upgrade-swap pass
+
 **Tournament Simulation** (`tournamentSimulation.js`)
 - Group stage: round-robin, 3/1/0 points, GD→GF tiebreakers
 - 3rd-place selection: best 8 of 12 by points→GD→GF
 - Knockout: 90-min result; draws → extra time (0.35× rate) → 50/50 penalty shootout
 - R32 bracket: 8 group winners (A–H) vs 8 best thirds; 4 winners (I–L) vs runners-up; 4 runners-up cross-bracket
+- **Three model modes** via `model` parameter:
+  - `'full'` — Dixon-Coles with full Bayesian params (default)
+  - `'dc'` — Dixon-Coles with Elo-only prior (no MLE fitting)
+  - `'elo'` — logistic win formula; draw rate tapers with Elo gap; Poisson goal counts for tiebreakers
+- `runMonteCarlo(n, params, lockedResults, model, eloMap)` — standard single-model run
+- `runMonteCarloCompare(n, fullParams, dcParams, eloMap, lockedResults)` — all three models; returns divergence table sorted by winner% spread
 - Monte Carlo: 10,000 sims in ~1 second; aggregates R16/QF/SF/Final/Winner probabilities
 - `lockedResults` map overrides simulated group results with real scores
+- `getCachedProbs()` / `setCachedProbs()` — module-level singleton reused by fantasy route
 
 #### API Endpoints (`backend/server.js`, `backend/routes/`)
 - `GET /api/teams` — all 48 teams with ratings, Elo, form, squad stats
 - `GET /api/team/:id` — single team full profile
 - `GET /api/fixtures` — all 104 fixtures with match status
-- `GET /api/match/:teamA/:teamB` — Dixon-Coles prediction for any matchup
-- `POST /api/simulate` — body `{ numSims, lockedResults? }` → Monte Carlo probabilities
+- `GET /api/match/:teamA/:teamB` — Dixon-Coles prediction + H2H record for any matchup
+- `POST /api/simulate` — body `{ numSims, model?: 'full'|'dc'|'elo', lockedResults? }` → Monte Carlo probabilities
+- `POST /api/simulate/compare` — body `{ numSims? }` → all three models + divergence table
 - `GET /api/bracket` — current bracket state
+- `GET /api/results` — all locked real match results
+- `POST /api/results` — lock a result: `{ matchId, goalsA, goalsB }`
+- `DELETE /api/results/:matchId` — unlock a result
 - `POST /api/refresh` — invalidate all caches and re-fetch
+- `GET /api/fantasy/players` — all 720 players enriched with xptsTotal, xptsGroupStage, xptsKnockout, stats
+- `GET /api/fantasy/optimise` — optimal 15-player squad within $100M budget
+- `GET /api/history` — filterable, paginated match archive
+- `GET /api/history/curated` — top-5 highest-scoring and biggest-upset matches
 
 ### Frontend (`frontend/`)
 
 #### Views
 
-**Team Dashboard** — sortable table: attack/defense/Elo/form/market value; path-to-final breakdown
+**Team Dashboard** — sortable table: attack/defense/Elo/form/market value; path-to-final breakdown; Sankey flow diagram; two-team comparison
 
-**Match Predictions** — all 104 fixtures; per-row xG, W/D/L%, status badge; expand → score histogram
+**Match Predictions** — all 104 fixtures; per-row xG, W/D/L%, status badge; expand → score heatmap + H2H record overlay; result locking
 
-**Tournament Bracket Simulator** — visual 48→32→16→8→4→2→1 bracket; probability overlays; "Run Simulation" button
+**Tournament Bracket** — visual 48→32→16→8→4→2→1 bracket; model selector (Full Bayesian / Dixon-Coles / Elo Only); Compare Models → divergence panel; bracket creator wizard; prediction leaderboard; social share card
 
-**Scenario Explorer** — lock any group match result; recalculate knockout probabilities; baseline vs. scenario comparison
+**Scenario Explorer** — lock any group match result; recalculate knockout probabilities; shareable `?s=` URL
+
+**Group of Death** — composite strength/competitiveness rankings for all 12 groups; upset risk
+
+**History** — filterable archive 7,500+ matches; curated sections; CSV export; penalty shootout annotations
+
+**Fantasy WC 2026** — Squad Builder (pitch view + player browser + budget bar + Clear all); My Team (xPts table + captain selector); Optimise (best squad button)
+
+#### Other frontend files
+- `favicon.svg` — soccer ball favicon: dark navy ball, gold bezier seam lines
+- `i18n.js` — EN/DE string table; `t()`, `getLang()`, `setLang()`, `teamName()` exports
+- `charts.js` — Chart.js wrappers: score heatmap, attack/defense bar, score histogram
+- `sankey.js` — pure SVG tournament path flow diagram
 
 ## Data Sources
 
@@ -87,6 +131,8 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 | WC 2026 teams / groups | Hard-coded from Dec 2025 FIFA draw | — | Static |
 | Squad market values | Transfermarkt (via fetchSquadStats.js static table, May 2026) | No | Update monthly |
 | Squad average age | RotoWire projected rosters (May 2026) | No | Update on squad announcement |
+| Fantasy player prices/positions | Official FIFA Fantasy WC 2026 (play.fifa.com/fantasy) | No | Re-verify after June 2 squad announcements |
+| Fantasy player career stats | FBref / Wikipedia (curated, 69 players ≥ $7M) | No | Static pre-tournament |
 
 ## Technical Parameters
 
@@ -101,6 +147,12 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 | Home advantage | 0.1 (log-scale) | Zeroed for neutral WC venues |
 | Monte Carlo default N | 10,000 | ~1 second runtime |
 | Max goals in score matrix | 10 | Per team per match |
+| Fantasy budget | $100M | Group stage; $105M from R32+ |
+| Fantasy squad | 2 GK / 5 DEF / 5 MID / 3 FWD | = 15 players |
+| Fantasy country limit | 3 | Group stage |
+| Fantasy xPts blend α | 0.60 | Model weight vs individual historical stats |
+| Fantasy MIN_PRICE floor | $4.0M | Look-ahead budget guard in optimiser |
+| Elo-only draw base rate | 27% | Tapers exponentially with Elo gap (scale 500) |
 
 ## Code Structure
 
@@ -112,25 +164,37 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
     fetchMatches.js       # martj42 CSV fetch + cache
     computeElo.js         # Elo ratings from match history
     computeForm.js        # Recent form computation
+    computeH2H.js         # Head-to-head record computation
     fetchSquadStats.js    # Market values + avg ages (static table)
+    players.js            # 720 fantasy players (static; re-verify after June 2)
+    playerStats.js        # Individual career stats for 69 players ≥ $7M
+    results.js            # Persistent locked match results
     cache.js              # File-based cache utility
     index.js              # Unified data loader
     /cache                # Runtime JSON cache files (gitignored)
   /models
-    hierarchicalBayesian.js   # Attack/defense parameter estimation
+    hierarchicalBayesian.js   # Attack/defense estimation; DC-only + Elo-map helpers
     dixonColes.js             # Match prediction + Poisson sampler
-    tournamentSimulation.js   # Monte Carlo tournament simulation
+    fantasyEngine.js          # xPts projection engine + squad optimiser
+    tournamentSimulation.js   # Monte Carlo; all three model modes; compare runner
     test.js                   # Integration smoke test
   /routes
     teams.js
     matches.js
-    simulate.js
+    simulate.js           # POST /api/simulate (model param) + /api/simulate/compare
+    fantasy.js            # GET /api/fantasy/players + /api/fantasy/optimise
+    results.js
+    history.js
+  /middleware
+    validate.js
   server.js
 /frontend
   index.html
   app.js
   charts.js
-  i18n.js       # EN/DE string table; t(), getLang(), setLang(), teamName() exports
+  sankey.js
+  i18n.js                # EN/DE string table
+  favicon.svg            # Dark navy soccer ball, gold seam lines
   styles.css
 ```
 
@@ -147,4 +211,6 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 - Colombia is in Group K with Portugal, Congo DR, Uzbekistan
 - Squad market values and ages are static tables; update from Transfermarkt/ESPN before each tournament phase
 - The 8 best 3rd-place bracket seeding is simplified for Monte Carlo purposes; exact FIFA rules are more complex
-- Penalty shootout currently modelled as 50/50 — future enhancement: per-team historical shootout data
+- Penalty shootout currently modelled as 50/50 — future enhancement: per-team historical shootout data (issue #8)
+- Fantasy player positions sourced from play.fifa.com/fantasy; re-verify the full `players.js` table after official squad announcements on June 2, 2026
+- Fantasy optimiser is greedy + local search — issue #58 tracks improvements (multi-swap pass, random restarts)
