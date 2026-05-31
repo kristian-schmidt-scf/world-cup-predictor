@@ -10,7 +10,48 @@
 
 import { GROUP_TEAMS, GROUPS } from '../data/fixtures.js';
 import { TEAMS } from '../data/teams.js';
-import { expectedGoals, sampleScore } from './dixonColes.js';
+import { expectedGoals, sampleScore, samplePoisson } from './dixonColes.js';
+
+// ── Elo-only match simulation (logistic win prob, no Poisson score matrix) ───
+const ELO_DRAW_BASE  = 0.27;  // draw rate at equal strength
+const ELO_DRAW_SCALE = 500;   // Elo diff at which draw rate decays by 1/e
+
+function eloSimulateMatch(teamA, teamB, eloMap, isKnockout = false) {
+  const eloA = eloMap[teamA] ?? 1500;
+  const eloB = eloMap[teamB] ?? 1500;
+  const diff = eloA - eloB;
+
+  const pWinA = 1 / (1 + Math.pow(10, -diff / 400));
+  const pDraw = ELO_DRAW_BASE * Math.exp(-Math.abs(diff) / ELO_DRAW_SCALE);
+  const adjA  = pWinA        * (1 - pDraw);
+  const adjB  = (1 - pWinA) * (1 - pDraw);
+
+  const r = Math.random();
+  let goalsA, goalsB, winner;
+
+  if (r < adjA) {
+    const xgA = Math.max(0.5, 1.4 + diff / 1500);
+    const xgB = Math.max(0.2, 0.7 - diff / 2000);
+    goalsA = samplePoisson(xgA);
+    goalsB = samplePoisson(xgB);
+    if (goalsA <= goalsB) goalsA = goalsB + 1;
+    winner = teamA;
+  } else if (r < adjA + pDraw) {
+    const g = samplePoisson(0.9);
+    goalsA = g; goalsB = g;
+    winner = isKnockout ? penaltyWinner(teamA, teamB) : null;
+  } else {
+    const xgB = Math.max(0.5, 1.4 - diff / 1500);
+    const xgA = Math.max(0.2, 0.7 + diff / 2000);
+    goalsB = samplePoisson(xgB);
+    goalsA = samplePoisson(xgA);
+    if (goalsB <= goalsA) goalsB = goalsA + 1;
+    winner = teamB;
+  }
+
+  if (isKnockout && !winner) winner = goalsA > goalsB ? teamA : teamB;
+  return { goalsA, goalsB, winner };
+}
 
 // ── Penalty shootout ─────────────────────────────────────────────────────────
 // Modelled as 50/50; extend with historical shootout data in a future iteration.
@@ -20,7 +61,9 @@ function penaltyWinner(teamA, teamB) {
 
 // ── Simulate a single match (returns winner or null for group-stage draws) ───
 
-function simulateMatch(teamA, teamB, params, isKnockout = false) {
+function simulateMatch(teamA, teamB, params, isKnockout = false, model = 'full', eloMap = {}) {
+  if (model === 'elo') return eloSimulateMatch(teamA, teamB, eloMap, isKnockout);
+
   const { xgA, xgB } = expectedGoals(teamA, teamB, params);
   const { goalsA, goalsB } = sampleScore(xgA, xgB);
 
@@ -39,7 +82,7 @@ function simulateMatch(teamA, teamB, params, isKnockout = false) {
 
 // ── Group stage ──────────────────────────────────────────────────────────────
 
-function simulateGroup(group, params, lockedResults = {}) {
+function simulateGroup(group, params, lockedResults = {}, model = 'full', eloMap = {}) {
   const teams = GROUP_TEAMS[group];
   const [t1, t2, t3, t4] = teams;
 
@@ -59,7 +102,7 @@ function simulateGroup(group, params, lockedResults = {}) {
     if (lockedResults[key] !== undefined) {
       ({ goalsA, goalsB } = lockedResults[key]);
     } else {
-      ({ goalsA, goalsB } = simulateMatch(a, b, params));
+      ({ goalsA, goalsB } = simulateMatch(a, b, params, false, model, eloMap));
     }
 
     stats[a].gf += goalsA; stats[a].gd += goalsA - goalsB;
@@ -106,14 +149,14 @@ function simulateKnockout(slots, params) {
 
 // ── One full tournament simulation ──────────────────────────────────────────
 
-function simulateOnce(params, lockedResults = {}) {
+function simulateOnce(params, lockedResults = {}, model = 'full', eloMap = {}) {
   const groupFirsts   = [];
   const groupSeconds  = [];
   const groupThirds   = [];
   const groupResults  = {}; // group → [{ id, pts, gd, finish, qualified }]
 
   for (const group of GROUPS) {
-    const ranked = simulateGroup(group, params, lockedResults);
+    const ranked = simulateGroup(group, params, lockedResults, model, eloMap);
     const [first, second, third] = ranked;
     groupFirsts.push(first.id);
     groupSeconds.push(second.id);
@@ -164,7 +207,7 @@ function simulateOnce(params, lockedResults = {}) {
   const advancers = (pairs) => {
     const next = [];
     for (let i = 0; i < pairs.length; i += 2) {
-      const { winner } = simulateMatch(pairs[i], pairs[i + 1], params, true);
+      const { winner } = simulateMatch(pairs[i], pairs[i + 1], params, true, model, eloMap);
       next.push(winner);
     }
     return next;
@@ -181,7 +224,7 @@ function simulateOnce(params, lockedResults = {}) {
 
 // ── Monte Carlo aggregation ──────────────────────────────────────────────────
 
-export function runMonteCarlo(n, params, lockedResults = {}) {
+export function runMonteCarlo(n, params, lockedResults = {}, model = 'full', eloMap = {}) {
   const teamIds = TEAMS.map(t => t.id);
 
   const counts = Object.fromEntries(teamIds.map(id => [id, {
@@ -195,7 +238,7 @@ export function runMonteCarlo(n, params, lockedResults = {}) {
   ]));
 
   for (let sim = 0; sim < n; sim++) {
-    const { stages, groupResults } = simulateOnce(params, lockedResults);
+    const { stages, groupResults } = simulateOnce(params, lockedResults, model, eloMap);
 
     for (const id of stages.r32) counts[id].r16++;
     for (const id of stages.r16) counts[id].qf++;
@@ -237,6 +280,23 @@ export function runMonteCarlo(n, params, lockedResults = {}) {
 
   const winnerSum = Object.values(probs).reduce((s, p) => s + p.winner, 0);
   return { probs, groups, meta: { n, winnerProbSum: round4(winnerSum) } };
+}
+
+// ── Run all three models and compute divergence ──────────────────────────────
+export function runMonteCarloCompare(n, fullParams, dcParams, eloMap, lockedResults = {}) {
+  const full = runMonteCarlo(n, fullParams, lockedResults, 'full', eloMap);
+  const dc   = runMonteCarlo(n, dcParams,   lockedResults, 'dc',   eloMap);
+  const elo  = runMonteCarlo(n, null,       lockedResults, 'elo',  eloMap);
+
+  // Divergence: for each team, compute spread of winner% across 3 models
+  const teamIds = TEAMS.map(t => t.id);
+  const divergence = teamIds.map(id => {
+    const vals = [full.probs[id].winner, dc.probs[id].winner, elo.probs[id].winner];
+    const spread = Math.max(...vals) - Math.min(...vals);
+    return { id, full: vals[0], dc: vals[1], elo: vals[2], spread: round4(spread) };
+  }).sort((a, b) => b.spread - a.spread);
+
+  return { full: full.probs, dc: dc.probs, elo: elo.probs, divergence, meta: { n } };
 }
 
 // ── Cached probs singleton — reused by fantasy engine to avoid re-running sim ──

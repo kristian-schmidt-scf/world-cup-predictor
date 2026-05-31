@@ -107,13 +107,20 @@
     <div id="tab-bracket" class="tab-pane">
       <div class="bracket-toolbar">
         <h2 data-i18n="tournamentOdds">Tournament Odds</h2>
+        <div class="model-selector" id="model-selector">
+          <button class="model-btn active" data-model="full"  data-i18n="modelFull">Full Bayesian</button>
+          <button class="model-btn"        data-model="dc"    data-i18n="modelDC">Dixon-Coles</button>
+          <button class="model-btn"        data-model="elo"   data-i18n="modelElo">Elo Only</button>
+        </div>
         <button class="btn-primary" id="run-sim-btn" data-i18n="runSim">Run 10,000 Simulations</button>
+        <button class="btn-secondary" id="compare-models-btn" data-i18n="compareModels">Compare Models</button>
         <div class="view-toggle" id="bracket-view-toggle">
           <button class="view-toggle-btn active" data-view="tree"  data-i18n="bracketTree">Tree</button>
           <button class="view-toggle-btn"         data-view="table" data-i18n="bracketTable">Table</button>
         </div>
         <span class="sim-info" id="bracket-sim-info"></span>
       </div>
+      <div id="model-divergence-panel" style="display:none"></div>
       <div id="champion-cards" class="champion-cards"></div>
 
       <!-- Tree view -->

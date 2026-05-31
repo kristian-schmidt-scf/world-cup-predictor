@@ -156,4 +156,30 @@ function round4(x) { return Math.round(x * 10_000) / 10_000; }
 
 export function invalidateParams() { invalidate(CACHE_KEY); }
 
+// ── DC-only: Elo-seeded prior, no MLE fitting ───────────────────────────────
+// Gives attack/defense params that reflect only Elo strength — no market
+// value, no squad age, no historical match calibration.
+export function estimateParamsDCOnly(eloRatings) {
+  const cached = get('team_params_dc');
+  if (cached) return cached;
+
+  const teams   = TEAMS;
+  const teamIds = teams.map(t => t.id);
+  const eloVals = teamIds.map(id => eloRatings[id] ?? 1500);
+  const mean    = eloVals.reduce((a, b) => a + b, 0) / eloVals.length;
+  const std     = Math.sqrt(eloVals.reduce((a, b) => a + (b - mean) ** 2, 0) / eloVals.length) || 1;
+
+  const result = Object.fromEntries(teamIds.map(id => {
+    const z = ((eloRatings[id] ?? mean) - mean) / std;
+    return [id, { attack: round4(0.35 * z), defense: round4(-0.25 * z) }];
+  }));
+  set('team_params_dc', result, CACHE_TTL);
+  return result;
+}
+
+// ── Elo-only: raw Elo ratings formatted for the simulation layer ────────────
+export function getEloMap(eloRatings) {
+  return Object.fromEntries(TEAMS.map(t => [t.id, eloRatings[t.id] ?? 1500]));
+}
+
 export { MAX_SCORE, HOME_ADV };
