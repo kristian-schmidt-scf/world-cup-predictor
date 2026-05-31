@@ -161,8 +161,21 @@ function countdownBadge(f) {
   return `<span class="badge badge-upcoming" title="${t('kickoffLabel', kickoffLocal)}">${label}</span>`;
 }
 
-function setSimStatus(msg) {
-  document.getElementById('sim-status').textContent = msg;
+function setSimStatus(msg, refining = false) {
+  const el = document.getElementById('sim-status');
+  el.textContent = msg;
+  el.classList.toggle('sim-refining', refining);
+}
+
+function flashSimUpdate() {
+  ['champion-cards', 'bracket-tree', 'bracket-tbody'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('sim-refreshed');
+    void el.offsetWidth; // force reflow so animation re-triggers
+    el.classList.add('sim-refreshed');
+    el.addEventListener('animationend', () => el.classList.remove('sim-refreshed'), { once: true });
+  });
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -1432,11 +1445,12 @@ function initBracketView() {
     btn.textContent = t('runningSim');
     setSimStatus(t('statusRunning'));
     try {
-      const data = await simulate(10_000);
+      const data = await simulate(50_000);
       state.simResults = data;
       state.simGroups  = data.groups ?? null;
       state.simMeta    = data.meta;
       setSimStatus(t('statusSims', data.meta.n, data.meta.elapsedMs));
+      flashSimUpdate();
       renderBracket();
       renderShareSection();
       renderTeamsTable();
@@ -1769,7 +1783,7 @@ async function runScenario() {
   btn.disabled = true;
   btn.textContent = t('runningSim');
   try {
-    const data = await simulate(10_000, state.scenarioLocks);
+    const data = await simulate(50_000, state.scenarioLocks);
     state.scenarioResults = data;
     renderScenarioResults();
   } catch (err) {
@@ -3295,14 +3309,14 @@ async function init() {
       rerenderAll();
     });
 
-    // Run initial simulation in background
+    // Two-pass simulation: 1k for instant feedback, then 50k background upgrade
     setSimStatus(t('statusInitial'));
     try {
-      const data = await simulate(10_000);
-      state.simResults = data;
-      state.simGroups  = data.groups ?? null;
-      state.simMeta    = data.meta;
-      setSimStatus(t('statusSims', data.meta.n, data.meta.elapsedMs));
+      const fast = await simulate(1_000);
+      state.simResults = fast;
+      state.simGroups  = fast.groups ?? null;
+      state.simMeta    = fast.meta;
+      setSimStatus(t('statusRefining'), true);
       renderTeamsTable();
       if (state.selectedTeamId) renderTeamDetail();
       renderGroupStandings(state.matchGroup);
@@ -3311,6 +3325,26 @@ async function init() {
         renderShareSection();
       }
       if (document.getElementById('tab-groups')?.classList.contains('active')) renderGroupsTab();
+
+      // Background upgrade — does not block; updates UI when ready
+      simulate(50_000).then(refined => {
+        state.simResults = refined;
+        state.simGroups  = refined.groups ?? null;
+        state.simMeta    = refined.meta;
+        setSimStatus(t('statusSims', refined.meta.n, refined.meta.elapsedMs));
+        flashSimUpdate();
+        renderTeamsTable();
+        if (state.selectedTeamId) renderTeamDetail();
+        renderGroupStandings(state.matchGroup);
+        if (document.getElementById('tab-bracket').classList.contains('active')) {
+          renderBracket();
+          renderShareSection();
+        }
+        if (document.getElementById('tab-groups')?.classList.contains('active')) renderGroupsTab();
+      }).catch(() => {
+        // 50k failed — fast results are still shown, just drop the refining indicator
+        setSimStatus(t('statusSims', state.simMeta.n, state.simMeta.elapsedMs));
+      });
     } catch {
       setSimStatus(t('statusUnavailable'));
     }
