@@ -324,12 +324,13 @@ const STRINGS = {
     kickoffLabel:  (dt) => `Kick-off: ${dt}`,
 
     // Header / status bar
-    statusRunning:     'Running 10,000 simulations…',
+    statusRunning:     'Running 50,000 simulations…',
     statusSims:        (n, ms) => `${n.toLocaleString()} sims · ${ms}ms`,
     statusUpdating:    'Updating simulation…',
     statusFailed:      'Simulation failed',
     statusUnavailable: 'Simulation unavailable',
     statusInitial:     'Running initial simulation…',
+    statusRefining:    'Refining — upgrading to 50k sims…',
 
     // Load error
     serverError: (msg) => `Failed to load: ${msg}`,
@@ -698,12 +699,13 @@ const STRINGS = {
     kickoffLabel:  (dt) => `Anstoß: ${dt}`,
 
     // Header / status bar
-    statusRunning:     '10.000 Simulationen laufen…',
+    statusRunning:     '50.000 Simulationen laufen…',
     statusSims:        (n, ms) => `${n.toLocaleString('de-DE')} Sim. · ${ms}ms`,
     statusUpdating:    'Simulation wird aktualisiert…',
     statusFailed:      'Simulation fehlgeschlagen',
     statusUnavailable: 'Simulation nicht verfügbar',
     statusInitial:     'Erste Simulation läuft…',
+    statusRefining:    'Verfeinern — 50k Simulationen laufen…',
 
     // Load error
     serverError: (msg) => `Laden fehlgeschlagen: ${msg}`,
