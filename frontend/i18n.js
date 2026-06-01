@@ -120,9 +120,11 @@ const STRINGS = {
     roundWinner: 'Winner',
 
     // Bracket SVG labels
-    bktWinner:      'WINNER',
-    bktTbd:         'TBD',
-    bktTooltipTitle:(label) => `Top 5 — Reach ${label}`,
+    bktWinner:       'WINNER',
+    bktTbd:          'TBD',
+    bktTooltipTitle: (label) => `Top 5 — Reach ${label}`,
+    bktTeamProfile:  'Full profile →',
+    bktClearSel:     'Clear selection',
 
     // Champion card ranks
     ranks: ['1st', '2nd', '3rd', '4th', '5th'],
@@ -498,6 +500,8 @@ const STRINGS = {
     bktWinner:       'SIEGER',
     bktTbd:          'N/A',
     bktTooltipTitle: (label) => `Top 5 — ${label} erreichen`,
+    bktTeamProfile:  'Vollprofil →',
+    bktClearSel:     'Auswahl aufheben',
 
     // Champion card ranks
     ranks: ['1.', '2.', '3.', '4.', '5.'],
