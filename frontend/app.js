@@ -57,8 +57,9 @@ const state = {
   filter:         '',
   sort:           { col: 'elo', dir: -1 },  // dir: -1 = desc, 1 = asc
   bracketView:    'tree',
-  simModel:       'full',   // 'full' | 'dc' | 'elo'
-  modelComparison: null,    // result of /api/simulate/compare
+  simModel:         'full',  // 'full' | 'dc' | 'elo'
+  modelComparison:  null,   // result of /api/simulate/compare
+  bktSelectedTeam:  null,   // team currently highlighted in the bracket tree
   shareFormat:    'landscape',
   lbToken:        (() => { try { return localStorage.getItem('wc26-lb-token'); } catch { return null; } })(),
   lbUser:         null,
@@ -1202,6 +1203,107 @@ function renderBracketTree() {
     <div id="bkt-tooltip" class="bkt-tooltip hidden"></div>`;
 
   setupBracketTooltip();
+  setupBracketClicks();
+
+  // Restore selection if a team was highlighted before this re-render
+  if (state.bktSelectedTeam) {
+    const svg = document.getElementById('bracket-svg');
+    if (svg?.querySelector(`.bkt-slot[data-team="${state.bktSelectedTeam}"]`)) {
+      applyBracketSelection(svg, state.bktSelectedTeam);
+      renderBktTeamPanel(state.bktSelectedTeam);
+    } else {
+      state.bktSelectedTeam = null;
+    }
+  }
+}
+
+function clearBracketSelection() {
+  const svg = document.getElementById('bracket-svg');
+  if (svg) {
+    svg.classList.remove('has-selection');
+    svg.querySelectorAll('.bkt-slot.selected').forEach(el => el.classList.remove('selected'));
+  }
+  document.getElementById('bkt-team-panel')?.classList.add('hidden');
+  state.bktSelectedTeam = null;
+}
+
+function renderBktTeamPanel(teamId) {
+  const panel = document.getElementById('bkt-team-panel');
+  if (!panel || !state.simResults) return;
+
+  const probs = state.simResults.probs[teamId];
+  if (!probs) return;
+
+  const fmt = v => (v * 100).toFixed(1) + '%';
+  const probColor = v => v >= 0.4 ? '#22c55e' : v >= 0.15 ? '#f59e0b' : '#94a3b8';
+  const stages = [
+    { key: 'r16',    label: t('roundR16') },
+    { key: 'qf',     label: t('roundQF') },
+    { key: 'sf',     label: t('roundSF') },
+    { key: 'final',  label: t('roundFinal') },
+    { key: 'winner', label: t('roundWinner') },
+  ];
+
+  panel.innerHTML = `
+    <div class="bkt-panel-inner">
+      <div class="bkt-panel-header">
+        <span class="bkt-panel-flag">${flag(teamId)}</span>
+        <span class="bkt-panel-name">${getTeamName(teamId)}</span>
+      </div>
+      <div class="bkt-panel-probs">
+        ${stages.map(s => {
+          const v = probs[s.key] ?? 0;
+          return `<div class="bkt-panel-stage">
+            <span class="bkt-panel-stage-label">${s.label}</span>
+            <span class="bkt-panel-stage-prob" style="color:${probColor(v)}">${fmt(v)}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="bkt-panel-actions">
+        <button class="btn-secondary btn-sm bkt-panel-detail">${t('bktTeamProfile')}</button>
+        <button class="bkt-panel-close" aria-label="${t('bktClearSel')}">✕</button>
+      </div>
+    </div>`;
+
+  panel.classList.remove('hidden');
+
+  panel.querySelector('.bkt-panel-close').addEventListener('click', clearBracketSelection);
+
+  panel.querySelector('.bkt-panel-detail').addEventListener('click', () => {
+    switchTab('teams');
+    state.selectedTeamId = teamId;
+    renderTeamDetail();
+    document.querySelector(`tr[data-team="${teamId}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
+
+function applyBracketSelection(svg, teamId) {
+  svg.classList.add('has-selection');
+  svg.querySelectorAll(`.bkt-slot[data-team="${teamId}"]`)
+    .forEach(el => el.classList.add('selected'));
+}
+
+function setupBracketClicks() {
+  const svg = document.getElementById('bracket-svg');
+  if (!svg) return;
+
+  svg.addEventListener('click', e => {
+    const slot   = e.target.closest('.bkt-slot');
+    const teamId = slot?.dataset.team;
+
+    if (!teamId || teamId === state.bktSelectedTeam) {
+      clearBracketSelection();
+      return;
+    }
+
+    // Clear previous, then highlight the new team
+    svg.classList.remove('has-selection');
+    svg.querySelectorAll('.bkt-slot.selected').forEach(el => el.classList.remove('selected'));
+    state.bktSelectedTeam = teamId;
+    applyBracketSelection(svg, teamId);
+    renderBktTeamPanel(teamId);
+  });
 }
 
 function setupBracketTooltip() {
