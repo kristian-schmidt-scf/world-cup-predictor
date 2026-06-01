@@ -131,7 +131,12 @@ const STRINGS = {
 
     // Scenario page
     scenarioExplorer: 'Scenario Explorer',
-    scenarioHelp:     'Lock group match results to explore how outcomes shift tournament probabilities.',
+    scenarioHelp:     'Lock group match results or mark players unavailable to explore how outcomes shift tournament probabilities.',
+    availTitle:       'Player Availability',
+    availCount:       'unavailable',
+    availSearch:      'Search player or team…',
+    availMark:        'Mark unavailable',
+    availNoResults:   'No players found.',
     runScenario:      'Run Scenario',
     clearAll:         'Clear All',
     scenarioVsBaseline: 'Scenario vs Baseline',
@@ -508,7 +513,12 @@ const STRINGS = {
 
     // Scenario page
     scenarioExplorer: 'Szenario-Rechner',
-    scenarioHelp:     'Gruppenspiele festlegen und sehen, wie sich Ergebnisse auf die Turnierwahrscheinlichkeiten auswirken.',
+    scenarioHelp:     'Gruppenspiele festlegen oder Spieler sperren, um Auswirkungen auf die Turnierwahrscheinlichkeiten zu sehen.',
+    availTitle:       'Spielerverfügbarkeit',
+    availCount:       'gesperrt',
+    availSearch:      'Spieler oder Team suchen…',
+    availMark:        'Sperren',
+    availNoResults:   'Keine Spieler gefunden.',
     runScenario:      'Szenario starten',
     clearAll:         'Zurücksetzen',
     scenarioVsBaseline: 'Szenario vs. Basis',

@@ -11,10 +11,13 @@ const VALID_MODELS = new Set(['full', 'dc', 'elo']);
 const router = Router();
 
 // POST /api/simulate
-// Body: { numSims, model?: 'full'|'dc'|'elo', lockedResults? }
+// Body: { numSims, model?: 'full'|'dc'|'elo', lockedResults?, playerModifiers? }
+// playerModifiers: { [teamId]: { attackMult: number, defenseMult: number } }
+//   attackMult  ∈ (0,1] — scales team's expected goals scored
+//   defenseMult ∈ (0,1] — scales team's defensive quality (lower = more goals conceded)
 router.post('/simulate', validateNumSims, async (req, res, next) => {
   try {
-    const { numSims, lockedResults = {}, model = 'full' } = req.body;
+    const { numSims, lockedResults = {}, model = 'full', playerModifiers = {} } = req.body;
     if (!VALID_MODELS.has(model)) return res.status(400).json({ error: `Unknown model: ${model}` });
 
     const { matches, elo, squadStats } = await loadAll();
@@ -25,6 +28,22 @@ router.post('/simulate', validateNumSims, async (req, res, next) => {
     if (model === 'full') params = fullParams;
     else if (model === 'dc') params = estimateParamsDCOnly(elo);
     else params = null; // elo model ignores params
+
+    // Apply player-availability modifiers in log-space
+    // attackMult < 1 → team scores fewer goals → attack param decreases
+    // defenseMult < 1 → team concedes more goals → defense param increases (less negative)
+    if (params && Object.keys(playerModifiers).length) {
+      params = { ...params };
+      for (const [teamId, { attackMult = 1, defenseMult = 1 }] of Object.entries(playerModifiers)) {
+        if (!params[teamId]) continue;
+        const am = Math.max(0.3, Math.min(1, attackMult));
+        const dm = Math.max(0.3, Math.min(1, defenseMult));
+        params[teamId] = {
+          attack:  params[teamId].attack  + Math.log(am),
+          defense: params[teamId].defense - Math.log(dm),
+        };
+      }
+    }
 
     const merged = { ...lockedResults, ...getResults() };
 

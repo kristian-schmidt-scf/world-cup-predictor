@@ -59,7 +59,9 @@ const state = {
   bracketView:    'tree',
   simModel:         'full',  // 'full' | 'dc' | 'elo'
   modelComparison:  null,   // result of /api/simulate/compare
-  bktSelectedTeam:  null,   // team currently highlighted in the bracket tree
+  bktSelectedTeam:    null,   // team currently highlighted in the bracket tree
+  unavailablePlayers: new Set(), // player IDs marked as injured/suspended
+  availFilter:        '',        // search text in player availability panel
   shareFormat:    'landscape',
   lbToken:        (() => { try { return localStorage.getItem('wc26-lb-token'); } catch { return null; } })(),
   lbUser:         null,
@@ -86,11 +88,11 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-async function simulate(numSims, scenarioLocks = {}, model = state.simModel) {
+async function simulate(numSims, scenarioLocks = {}, model = state.simModel, playerModifiers = {}) {
   return api('/simulate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ numSims, lockedResults: scenarioLocks, model }),
+    body: JSON.stringify({ numSims, lockedResults: scenarioLocks, model, playerModifiers }),
   });
 }
 
@@ -1880,12 +1882,126 @@ function renderScenarioMatches(group) {
   });
 }
 
+// ── Player availability modifiers ────────────────────────────────────────────
+
+function computePlayerModifiers() {
+  if (!state.unavailablePlayers.size) return {};
+  const players = state.fantasy.players ?? [];
+  if (!players.length) return {};
+
+  // Group by team
+  const byTeam = {};
+  for (const p of players) {
+    (byTeam[p.team] ??= []).push(p);
+  }
+
+  const modifiers = {};
+  const DAMP = 0.65; // max fraction any single player can reduce a rating
+
+  for (const [team, teamPlayers] of Object.entries(byTeam)) {
+    const unavail = teamPlayers.filter(p => state.unavailablePlayers.has(p.id));
+    if (!unavail.length) continue;
+
+    // Offensive score: goals/match + 0.5×assists/match (with price fallback)
+    const offScore = p => (p.stats?.goalsPerMatch ?? 0) + 0.5 * (p.stats?.assistsPerMatch ?? 0)
+                        + p.price * 0.01;
+    const attPlayers = teamPlayers.filter(p => p.pos === 'FWD' || p.pos === 'MID');
+    const totalOff   = attPlayers.reduce((s, p) => s + offScore(p), 0) || 1;
+
+    // Defensive: price share
+    const defPlayers = teamPlayers.filter(p => p.pos === 'DEF' || p.pos === 'GK');
+    const totalDef   = defPlayers.reduce((s, p) => s + p.price, 0) || 1;
+
+    let attRed = 0, defRed = 0;
+    for (const p of unavail) {
+      if (p.pos === 'FWD' || p.pos === 'MID') attRed += (offScore(p) / totalOff) * DAMP;
+      else                                     defRed += (p.price / totalDef) * DAMP;
+    }
+
+    modifiers[team] = {
+      attackMult:  Math.max(0.4, 1 - attRed),
+      defenseMult: Math.max(0.4, 1 - defRed),
+    };
+  }
+  return modifiers;
+}
+
+function renderPlayerAvailability() {
+  const el = document.getElementById('player-availability');
+  if (!el) return;
+
+  const players = state.fantasy.players ?? [];
+  const query   = state.availFilter.toLowerCase().trim();
+  const unavail = state.unavailablePlayers;
+
+  // Chips for currently unavailable players
+  const chips = [...unavail].map(id => {
+    const p = players.find(x => x.id === id);
+    if (!p) return '';
+    return `<span class="avail-chip">
+      ${flag(p.team)} <strong>${p.name}</strong>
+      <button class="avail-chip-remove" data-id="${id}">✕</button>
+    </span>`;
+  }).join('');
+
+  // Filtered player list (max 8, excluding already-unavailable)
+  let rows = '';
+  if (query.length >= 2) {
+    const matches = players
+      .filter(p => !unavail.has(p.id) &&
+        (p.name.toLowerCase().includes(query) || p.team.toLowerCase().includes(query)))
+      .slice(0, 8);
+    rows = matches.map(p => `
+      <div class="avail-result-row" data-id="${p.id}">
+        ${flag(p.team)}
+        <span class="avail-result-name">${p.name}</span>
+        <span class="avail-result-meta">${p.team} · ${p.pos} · $${p.price}M</span>
+        <button class="avail-add-btn btn-sm" data-id="${p.id}">${t('availMark')}</button>
+      </div>`).join('');
+    if (!rows) rows = `<div class="avail-no-results">${t('availNoResults')}</div>`;
+  }
+
+  el.innerHTML = `
+    <div class="avail-header">
+      <span class="avail-title">${t('availTitle')}</span>
+      ${unavail.size ? `<span class="avail-count">${unavail.size} ${t('availCount')}</span>` : ''}
+    </div>
+    ${chips ? `<div class="avail-chips">${chips}</div>` : ''}
+    <input class="avail-search" type="text" placeholder="${t('availSearch')}"
+           value="${state.availFilter}">
+    ${rows ? `<div class="avail-results">${rows}</div>` : ''}`;
+
+  // Wire search
+  el.querySelector('.avail-search').addEventListener('input', e => {
+    state.availFilter = e.target.value;
+    renderPlayerAvailability();
+  });
+
+  // Wire chip removes
+  el.querySelectorAll('.avail-chip-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.unavailablePlayers.delete(btn.dataset.id);
+      renderPlayerAvailability();
+    });
+  });
+
+  // Wire add buttons
+  el.querySelectorAll('.avail-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.unavailablePlayers.add(btn.dataset.id);
+      state.availFilter = '';
+      renderPlayerAvailability();
+    });
+  });
+}
+
 async function runScenario() {
   const btn = document.getElementById('run-scenario-btn');
   btn.disabled = true;
   btn.textContent = t('runningSim');
   try {
-    const data = await simulate(50_000, state.scenarioLocks);
+    const modifiers = computePlayerModifiers();
+    const data = await simulate(50_000, state.scenarioLocks, state.simModel, modifiers);
     state.scenarioResults = data;
     renderScenarioResults();
   } catch (err) {
@@ -1962,6 +2078,13 @@ function initScenarioView() {
   });
 
   document.getElementById('run-scenario-btn').addEventListener('click', runScenario);
+
+  // Load fantasy players for the availability panel (if not already loaded)
+  if (!state.fantasy.players) {
+    loadFantasyPlayers().then(() => renderPlayerAvailability());
+  } else {
+    renderPlayerAvailability();
+  }
 
   document.getElementById('clear-scenario-btn').addEventListener('click', () => {
     state.scenarioLocks = {};
