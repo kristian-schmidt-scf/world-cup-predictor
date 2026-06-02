@@ -324,6 +324,10 @@ const STRINGS = {
     sankeyCompareLabel: (a, b) => `${a} vs ${b}`,
     sankeyCompareNone:  '— none —',
 
+    // Confidence intervals
+    ciTooltip: '±1 standard error (binomial SE = √(p·(1−p)/N))',
+    ciNote:    '± values are ±1 SE (binomial standard error). At this sample size, differences smaller than ±2 SE may not be statistically meaningful.',
+
     // Status badges
     badgeUpcoming: 'Upcoming',
     badgeLive:     'LIVE',
@@ -707,6 +711,9 @@ const STRINGS = {
     sankeyCompareNone:  '— keiner —',
 
     // Status badges
+    ciTooltip: '±1 Standardfehler (binomial SE = √(p·(1−p)/N))',
+    ciNote:    '± Werte sind ±1 Standardfehler. Bei dieser Stichprobengröße sind Unterschiede kleiner als ±2 SE möglicherweise nicht statistisch bedeutsam.',
+
     badgeUpcoming: 'Geplant',
     badgeLive:     'LIVE',
     badgeFTScore:  (a, b) => `ET ${a}:${b}`,

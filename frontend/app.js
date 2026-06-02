@@ -130,6 +130,20 @@ const pClass  = v  => v == null ? '' : v >= 0.10 ? 'p-high' : v >= 0.03 ? 'p-med
 const fmtDate = ds => ds ? new Date(ds).toLocaleDateString(t('dateLocale'), { month:'short', day:'numeric' }) : '—';
 const teamProbs = id => state.simResults?.probs?.[id] ?? null;
 
+// Binomial standard error: SE = sqrt(p*(1-p)/N)
+// Returns null when too small to be worth showing (< 0.1pp).
+function binomialSE(p, n) {
+  if (!n || p == null) return null;
+  const se = Math.sqrt(p * (1 - p) / n);
+  return se >= 0.001 ? se : null;
+}
+// Renders "±X.X%" in a muted span; returns '' when SE is negligible.
+function ciSpan(p, n) {
+  const se = binomialSE(p, n);
+  if (se == null) return '';
+  return `<span class="ci" title="${t('ciTooltip')}">±${(se * 100).toFixed(1)}%</span>`;
+}
+
 // Returns the status badge HTML for a fixture based on time and locked state.
 function countdownBadge(f) {
   const locked = state.lockedResults[matchKey(f)];
@@ -329,6 +343,7 @@ function renderTeamDetail() {
   const pr = teamProbs(tm.id);
   const groupTeams = state.teams.filter(g => g.group === tm.group);
 
+  const simN = state.simMeta?.n ?? 0;
   const stagesHtml = pr
     ? STAGE_LABELS().map(([key, label]) => {
         const pv  = pr[key] ?? 0;
@@ -337,7 +352,7 @@ function renderTeamDetail() {
           <div class="stage-row">
             <span class="stage-label">${label}</span>
             <div class="stage-bar"><div class="stage-fill" style="width:${w}%"></div></div>
-            <span class="stage-pct">${(pv*100).toFixed(1)}%</span>
+            <span class="stage-pct">${(pv*100).toFixed(1)}%${ciSpan(pv, simN)}</span>
           </div>`;
       }).join('')
     : `<p style="color:var(--muted);font-size:13px">${t('runSimForProbs')}</p>`;
@@ -1377,15 +1392,17 @@ function renderBracket() {
     .sort((a, b) => (teamProbs(b.id)?.winner ?? 0) - (teamProbs(a.id)?.winner ?? 0))
     .slice(0, 5);
   const ranks = t('ranks');
+  const simN  = state.simMeta?.n ?? 0;
   cards.innerHTML = top5.map((tm, i) => {
-    const pct = ((teamProbs(tm.id)?.winner ?? 0) * 100).toFixed(1);
+    const p   = teamProbs(tm.id)?.winner ?? 0;
+    const pct = (p * 100).toFixed(1);
     return `
       <div class="champion-card">
         <div class="champion-rank">${ranks[i]}</div>
         <div class="champion-flag">${flag(tm.id)}</div>
         <div class="champion-id">${tm.id}</div>
         <div class="champion-name">${getTeamName(tm.id)}</div>
-        <div class="champion-pct">${pct}%</div>
+        <div class="champion-pct">${pct}%${ciSpan(p, simN)}</div>
       </div>`;
   }).join('');
 
@@ -1398,6 +1415,7 @@ function renderBracket() {
 
 function renderBracketTable() {
   const tbody  = document.getElementById('bracket-tbody');
+  const n      = state.simMeta?.n ?? 0;
   const sorted = [...state.teams].sort((a, b) =>
     (teamProbs(b.id)?.winner ?? 0) - (teamProbs(a.id)?.winner ?? 0)
   );
@@ -1405,7 +1423,7 @@ function renderBracketTable() {
     if (!v) return `<td style="color:var(--border)">—</td>`;
     const alpha = Math.min(0.65, v * 5);
     const bold  = v >= 0.05 ? 'font-weight:700' : '';
-    return `<td style="background:rgba(59,130,246,${alpha.toFixed(2)});${bold}">${(v*100).toFixed(1)}%</td>`;
+    return `<td style="background:rgba(59,130,246,${alpha.toFixed(2)});${bold}">${(v*100).toFixed(1)}%${ciSpan(v, n)}</td>`;
   };
   tbody.innerHTML = sorted.map(tm => {
     const pr = state.simResults.probs[tm.id] ?? {};
@@ -1416,6 +1434,10 @@ function renderBracketTable() {
         ${cell(pr.r16)}${cell(pr.qf)}${cell(pr.sf)}${cell(pr.final)}${cell(pr.winner)}
       </tr>`;
   }).join('');
+
+  // CI explanatory note (only shown when CIs are visible, i.e. at low N)
+  const noteEl = document.getElementById('bracket-ci-note');
+  if (noteEl) noteEl.style.display = n < 20_000 ? '' : 'none';
 }
 
 // ── Share card helpers ─────────────────────────────────────────────────────────

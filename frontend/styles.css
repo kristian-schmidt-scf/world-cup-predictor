@@ -199,7 +199,7 @@ a { color: var(--accent); }
 .stage-label { width: 48px; font-size: 12px; color: var(--muted); }
 .stage-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
 .stage-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.6s ease; }
-.stage-pct { width: 42px; text-align: right; font-size: 12px; font-weight: 700; }
+.stage-pct { min-width: 42px; text-align: right; font-size: 12px; font-weight: 700; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    MATCHES VIEW
@@ -410,6 +410,16 @@ a { color: var(--accent); }
 .champion-id   { font-size: 22px; font-weight: 800; margin: 4px 0 2px; }
 .champion-name { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
 .champion-pct  { font-size: 22px; font-weight: 800; color: var(--accent); }
+
+/* ── Confidence interval spans ───────────────────────────────────────────── */
+.ci {
+  font-size: 10px; font-weight: 400; color: var(--muted);
+  margin-left: 3px; white-space: nowrap; cursor: help;
+  font-family: monospace;
+}
+.ci-note {
+  font-size: 11px; color: var(--muted); margin-top: 8px; font-style: italic;
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
    SIMULATED GROUP STANDINGS
