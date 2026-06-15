@@ -1237,8 +1237,23 @@ details[open] .gc-summary::after { content: ' ▴'; }
 
 /* ── Player browser filters ──────────────────────────────────────────────── */
 .fantasy-browser-filters {
-  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; align-items: center;
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;
 }
+.fantasy-filter-row {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+}
+.gameday-selector {
+  display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
+}
+.gameday-label {
+  font-size: 11px; color: var(--muted); margin-right: 2px; white-space: nowrap;
+}
+.gameday-btn {
+  padding: 3px 8px; border-radius: 12px; border: 1px solid var(--border);
+  font-size: 11px; font-weight: 600; background: transparent; color: var(--muted);
+  cursor: pointer; transition: all 0.12s;
+}
+.gameday-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .fantasy-pos-btn {
   padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border);
   font-size: 12px; font-weight: 600; background: transparent; color: var(--muted);
@@ -1315,3 +1330,124 @@ tr.in-squad { background: rgba(34,197,94,.04); }
 /* ── Optimise view ───────────────────────────────────────────────────────── */
 .optimise-header { padding: 16px 0 20px; max-width: 560px; }
 .optimise-header p { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+
+/* ── Ticker tab ──────────────────────────────────────────────────────────── */
+.ticker-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px; gap: 12px; flex-wrap: wrap;
+}
+.ticker-header h2 { font-size: 18px; font-weight: 700; }
+
+.ticker-controls {
+  display: flex; align-items: center; gap: 10px;
+}
+.ticker-updated { font-size: 12px; color: var(--muted); }
+.ticker-refresh-btn { font-size: 12px; padding: 4px 12px; }
+
+/* Pulsing live indicator dot */
+.ticker-live-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--loss);
+  animation: pulse-live 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.ticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.ticker-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+  transition: border-color 0.2s;
+}
+.ticker-card--live { border-color: rgba(239,68,68,.45); }
+
+.ticker-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+/* Teams + score row */
+.ticker-match {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: center; gap: 8px;
+}
+
+.ticker-team {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 14px; font-weight: 600;
+}
+.ticker-team--home { justify-content: flex-start; }
+.ticker-team--away { justify-content: flex-end; }
+.ticker-team .flag-img { width: 24px; height: auto; flex-shrink: 0; }
+.ticker-team-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Score block (centre column) */
+.ticker-score {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.ticker-score-nums {
+  display: flex; align-items: center; gap: 6px;
+}
+.ticker-score-num {
+  font-size: 28px; font-weight: 800; min-width: 28px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ticker-score-sep { font-size: 20px; color: var(--muted); }
+.ticker-ht { font-size: 11px; color: var(--muted); letter-spacing: .02em; }
+
+.ticker-score--upcoming {
+  justify-content: center;
+}
+.ticker-vs { font-size: 14px; color: var(--muted); font-weight: 600; }
+
+/* Goal scorers */
+.ticker-goals {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 4px 12px; margin-top: 12px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+}
+.ticker-goals-col {
+  display: flex; flex-direction: column; gap: 3px;
+}
+.ticker-goals-col--away { text-align: right; align-items: flex-end; }
+
+.ticker-goal {
+  font-size: 11px; color: var(--muted); white-space: nowrap;
+}
+.ticker-goal .goal-type {
+  color: var(--draw); font-style: italic;
+}
+.ticker-assist {
+  color: var(--muted); font-size: 10px;
+}
+
+.ticker-empty {
+  padding: 48px 0; text-align: center; color: var(--muted); font-size: 15px;
+}
+.ticker-error {
+  padding: 32px 0; text-align: center; color: var(--loss); font-size: 14px;
+}
+
+/* Section dividers: Today / Tomorrow / Yesterday */
+.ticker-section-header {
+  display: flex; align-items: center; gap: 14px;
+  margin: 36px 0 18px; color: var(--muted);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+}
+.ticker-section-header--today { margin-top: 0; color: var(--accent); }
+.ticker-section-header--future { color: var(--muted); }
+.ticker-section-header--past  { color: var(--muted); opacity: 0.6; }
+.ticker-section-header::before,
+.ticker-section-header::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.ticker-section-header--today::before,
+.ticker-section-header--today::after { background: var(--accent); opacity: 0.35; }
+.ticker-grid--past .ticker-card,
+.ticker-grid--tomorrow .ticker-card { opacity: 0.65; }
+.ticker-grid--past .ticker-card:hover,
+.ticker-grid--tomorrow .ticker-card:hover { opacity: 1; transition: opacity 0.15s; }

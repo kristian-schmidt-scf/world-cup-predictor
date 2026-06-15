@@ -300,8 +300,8 @@ export const PLAYERS = [
   { id:'GER_MID_4',team:'GER', name:'Leon Goretzka',          pos:'MID', price:6.1 },
   { id:'GER_MID_5',team:'GER', name:'Aleksandar Pavlovic',    pos:'MID', price:5.5 },
   { id:'GER_FWD_1',team:'GER', name:'Kai Havertz',            pos:'FWD', price:7.8 },
-  { id:'GER_FWD_2',team:'GER', name:'Niclas Fullkrug',        pos:'FWD', price:6.5 },
-  { id:'GER_FWD_3',team:'GER', name:'Thomas Muller',          pos:'FWD', price:6.0 },
+  { id:'GER_FWD_2',team:'GER', name:'Deniz Undav',            pos:'FWD', price:7.0 },
+  { id:'GER_FWD_3',team:'GER', name:'Niclas Fullkrug',        pos:'FWD', price:5.5 },
 
   // ECU
   { id:'ECU_GK_1', team:'ECU', name:'Hernan Galindez',        pos:'GK',  price:4.2 },

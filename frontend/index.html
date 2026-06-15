@@ -21,6 +21,7 @@
       <div class="logo">WC 2026 Predictor</div>
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="teams"    data-i18n="tabTeams">Teams</button>
+        <button class="tab-btn"        data-tab="ticker"   data-i18n="tabTicker">Ticker</button>
         <button class="tab-btn"        data-tab="matches"  data-i18n="tabMatches">Matches</button>
         <button class="tab-btn"        data-tab="groups"   data-i18n="tabGroups">Groups</button>
         <button class="tab-btn"        data-tab="bracket"  data-i18n="tabBracket">Bracket</button>
@@ -75,6 +76,11 @@
         </aside>
 
       </div>
+    </div>
+
+    <!-- ── TICKER ─────────────────────────────────────────────────────────── -->
+    <div id="tab-ticker" class="tab-pane">
+      <div id="ticker-content"></div>
     </div>
 
     <!-- ── MATCHES ────────────────────────────────────────────────────────── -->
@@ -259,7 +265,8 @@
                   <th data-i18n="fthTeam">Team</th>
                   <th data-i18n="fthName">Player</th>
                   <th data-sort="price" data-i18n="fthPrice">Price</th>
-                  <th data-sort="xpts"  data-i18n="fthXpts">xPts</th>
+                  <th data-sort="xpts"    data-i18n="fthXpts">xPts</th>
+                  <th data-sort="selxpts" data-i18n="fthSelXpts" title="xPts for selected game days">Sel.</th>
                   <th></th>
                 </tr>
               </thead>

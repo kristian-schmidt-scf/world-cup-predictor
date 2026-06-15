@@ -7,7 +7,7 @@ import { GROUP_FIXTURES, GROUPS, GROUP_TEAMS } from '../data/fixtures.js';
 import { get, set } from '../data/cache.js';
 import { PLAYER_STATS } from '../data/playerStats.js';
 
-const CACHE_KEY = 'fantasy_projections';
+const CACHE_KEY = 'fantasy_projections_v3';
 const CACHE_TTL_H = 24;
 
 // ── Scoring rules per position (official FIFA Fantasy WC 2026) ───────────────
@@ -108,17 +108,23 @@ export function projectPlayer(player, params, stageProbs, qualityWeight = 1) {
     f => f.home === player.team || f.away === player.team
   );
 
-  let xptsGroupStage = 0;
+  let xptsMD1 = 0, xptsMD2 = 0, xptsMD3 = 0;
   for (const f of teamFixtures) {
     const opponent = f.home === player.team ? f.away : f.home;
     const { xgFor, xgAgainst, pCS } = pCleanSheetFor(player.team, opponent, params);
-    xptsGroupStage += xptsMatch(player, xgFor, xgAgainst, pCS, qualityWeight);
+    const xptsFixture = xptsMatch(player, xgFor, xgAgainst, pCS, qualityWeight);
+    if (f.matchday === 1)      xptsMD1 += xptsFixture;
+    else if (f.matchday === 2) xptsMD2 += xptsFixture;
+    else if (f.matchday === 3) xptsMD3 += xptsFixture;
   }
+  const xptsGroupStage = xptsMD1 + xptsMD2 + xptsMD3;
 
   // ── Knockout rounds ─────────────────────────────────────────────────────────
   // Use team's average attack/defense to estimate a "typical" KO match
   const p = params[player.team];
-  if (!p) return { xptsGroupStage, xptsKnockout: 0, xptsTotal: xptsGroupStage };
+  if (!p) return { xptsGroupStage, xptsKnockout: 0, xptsTotal: xptsGroupStage,
+                   xptsMD1, xptsMD2, xptsMD3,
+                   xptsR32: 0, xptsR16: 0, xptsQF: 0, xptsSF: 0, xptsFinal: 0 };
 
   // Estimate xG against an average opponent (attack=0, defense=0 in log-space)
   const xgForKO      = Math.exp(p.attack);   // vs average defense = 0
@@ -142,15 +148,17 @@ export function projectPlayer(player, params, stageProbs, qualityWeight = 1) {
   // The runner-up also plays the Final — approximate as 2 × pFinal for "reaches final"
   const pReachesFinal = sp.final ?? 0;  // sp.final = P(reaches final round)
 
-  const xptsKnockout =
-    pQual        * xptsPerKO +  // R32
-    pR16         * xptsPerKO +  // R16
-    pQF          * xptsPerKO +  // QF
-    pSF          * xptsPerKO +  // SF
-    pReachesFinal * xptsPerKO;  // Final
+  const xptsR32    = pQual         * xptsPerKO;
+  const xptsR16    = pR16          * xptsPerKO;
+  const xptsQF     = pQF           * xptsPerKO;
+  const xptsSF     = pSF           * xptsPerKO;
+  const xptsFinal  = pReachesFinal * xptsPerKO;
+  const xptsKnockout = xptsR32 + xptsR16 + xptsQF + xptsSF + xptsFinal;
 
   const xptsTotal = xptsGroupStage + xptsKnockout;
-  return { xptsGroupStage, xptsKnockout, xptsTotal };
+  return { xptsGroupStage, xptsKnockout, xptsTotal,
+           xptsMD1, xptsMD2, xptsMD3,
+           xptsR32, xptsR16, xptsQF, xptsSF, xptsFinal };
 }
 
 // ── Price-based quality weights within a position group on each team ─────────
