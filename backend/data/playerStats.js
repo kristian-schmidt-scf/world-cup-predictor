@@ -40,6 +40,7 @@ export const PLAYER_STATS = {
 
   // ── HIGH-VALUE ($7.5–$7.9M) ───────────────────────────────────────────────
   'GER_FWD_1': { goalsPerMatch: 0.31, assistsPerMatch: 0.17, yellowsPerMatch: 0.07, minsPerMatch: 78 }, // Havertz
+  'GER_FWD_2': { goalsPerMatch: 0.27, assistsPerMatch: 0.13, yellowsPerMatch: 0.09, minsPerMatch: 74 }, // Undav
   'SWE_FWD_1': { goalsPerMatch: 0.76, assistsPerMatch: 0.10, yellowsPerMatch: 0.05, minsPerMatch: 81 }, // Gyokeres
   'ESP_FWD_2': { goalsPerMatch: 0.40, assistsPerMatch: 0.18, yellowsPerMatch: 0.06, minsPerMatch: 69 }, // Ferran Torres
   'POR_MID_2': { goalsPerMatch: 0.27, assistsPerMatch: 0.23, yellowsPerMatch: 0.08, minsPerMatch: 72 }, // Leao

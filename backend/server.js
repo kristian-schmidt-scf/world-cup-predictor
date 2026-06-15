@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -10,6 +11,7 @@ import resultsRouter  from './routes/results.js';
 import historyRouter      from './routes/history.js';
 import leaderboardRouter  from './routes/leaderboard.js';
 import fantasyRouter      from './routes/fantasy.js';
+import tickerRouter       from './routes/ticker.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
@@ -37,6 +39,7 @@ app.use('/api', resultsRouter);
 app.use('/api', historyRouter);
 app.use('/api', leaderboardRouter);
 app.use('/api', fantasyRouter);
+app.use('/api', tickerRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));

@@ -77,7 +77,8 @@ const state = {
     captainId: null,
     view:      'builder', // 'builder' | 'myteam' | 'optimise'
     filter:    { pos: '', nameQuery: '', maxPrice: 15 },
-    sortBy:    'xpts',
+    sortBy:       'xpts',
+    selectedDays: new Set(['md1','md2','md3','r32','r16','qf','sf','final']),
   },
 };
 
@@ -197,10 +198,12 @@ function flashSimUpdate() {
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 function switchTab(tab) {
+  if (tab !== 'ticker') stopTickerRefresh();
   document.querySelectorAll('.tab-pane').forEach(p  => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b   => b.classList.remove('active'));
   document.getElementById(`tab-${tab}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${tab}"]`)?.classList.add('active');
+  if (tab === 'ticker')      initTickerView();
   if (tab === 'bracket')     { renderBracket(); renderShareSection(); }
   if (tab === 'groups')      renderGroupsTab();
   if (tab === 'history')     renderHistoryTab();
@@ -3144,6 +3147,18 @@ function fantasySpent() {
   return state.fantasy.squad.reduce((s, p) => s + p.price, 0);
 }
 
+function xptsForSelectedDays(player) {
+  const d = state.fantasy.selectedDays;
+  return (d.has('md1')   ? player.xptsMD1   ?? 0 : 0)
+       + (d.has('md2')   ? player.xptsMD2   ?? 0 : 0)
+       + (d.has('md3')   ? player.xptsMD3   ?? 0 : 0)
+       + (d.has('r32')   ? player.xptsR32   ?? 0 : 0)
+       + (d.has('r16')   ? player.xptsR16   ?? 0 : 0)
+       + (d.has('qf')    ? player.xptsQF    ?? 0 : 0)
+       + (d.has('sf')    ? player.xptsSF    ?? 0 : 0)
+       + (d.has('final') ? player.xptsFinal ?? 0 : 0);
+}
+
 function canAddPlayer(p) {
   if (state.fantasy.squad.find(x => x.id === p.id)) return { ok: false, msg: t('fantasyToastDuplicate') };
   if (state.fantasy.squad.length >= 15)              return { ok: false, msg: t('fantasyToastFull') };
@@ -3245,16 +3260,30 @@ function renderPitch() {
 function renderFilters() {
   const f = document.getElementById('fantasy-filters');
   if (!f) return;
+  const days    = state.fantasy.selectedDays;
+  const dayDefs = [
+    { key: 'md1',   label: 'MD1'   }, { key: 'md2', label: 'MD2' }, { key: 'md3', label: 'MD3' },
+    { key: 'r32',   label: 'R32'   }, { key: 'r16', label: 'R16' }, { key: 'qf',  label: 'QF'  },
+    { key: 'sf',    label: 'SF'    }, { key: 'final', label: 'Final' },
+  ];
   f.innerHTML = `
-    ${['All','GK','DEF','MID','FWD'].map(pos =>
-      `<button class="fantasy-pos-btn${state.fantasy.filter.pos === (pos === 'All' ? '' : pos) ? ' active' : ''}"
-        data-pos="${pos === 'All' ? '' : pos}">${t(pos === 'All' ? 'fantasyAllPos' : pos) || pos}</button>`
-    ).join('')}
-    <input class="fantasy-search" type="text" placeholder="${t('fantasySearchPlaceholder')}"
-      value="${state.fantasy.filter.nameQuery}">
-    <div class="fantasy-price-filter">
-      <label>${t('fantasyMaxPrice')} $<input type="number" min="3.5" max="15" step="0.5"
-        value="${state.fantasy.filter.maxPrice}" style="width:55px;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;">M</label>
+    <div class="fantasy-filter-row">
+      ${['All','GK','DEF','MID','FWD'].map(pos =>
+        `<button class="fantasy-pos-btn${state.fantasy.filter.pos === (pos === 'All' ? '' : pos) ? ' active' : ''}"
+          data-pos="${pos === 'All' ? '' : pos}">${t(pos === 'All' ? 'fantasyAllPos' : pos) || pos}</button>`
+      ).join('')}
+      <input class="fantasy-search" type="text" placeholder="${t('fantasySearchPlaceholder')}"
+        value="${state.fantasy.filter.nameQuery}">
+      <div class="fantasy-price-filter">
+        <label>${t('fantasyMaxPrice')} $<input type="number" min="3.5" max="15" step="0.5"
+          value="${state.fantasy.filter.maxPrice}" style="width:55px;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;">M</label>
+      </div>
+    </div>
+    <div class="gameday-selector">
+      <span class="gameday-label">${t('fantasyGameDayLabel')}</span>
+      ${dayDefs.map(d =>
+        `<button class="gameday-btn${days.has(d.key) ? ' active' : ''}" data-day="${d.key}">${d.label}</button>`
+      ).join('')}
     </div>`;
 
   f.querySelectorAll('.fantasy-pos-btn').forEach(btn => {
@@ -3274,6 +3303,15 @@ function renderFilters() {
     state.fantasy.filter.maxPrice = parseFloat(priceEl.value) || 15;
     renderPlayerBrowser();
   });
+  f.querySelectorAll('.gameday-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const day = btn.dataset.day;
+      if (state.fantasy.selectedDays.has(day)) state.fantasy.selectedDays.delete(day);
+      else state.fantasy.selectedDays.add(day);
+      renderFilters();
+      renderPlayerBrowser();
+    });
+  });
 }
 
 function renderPlayerBrowser() {
@@ -3291,9 +3329,10 @@ function renderPlayerBrowser() {
   );
 
   const sortKey = state.fantasy.sortBy;
-  rows.sort((a, b) => sortKey === 'price'
-    ? b.price - a.price
-    : (b.xptsTotal ?? 0) - (a.xptsTotal ?? 0)
+  rows.sort((a, b) =>
+    sortKey === 'price'   ? b.price - a.price :
+    sortKey === 'selxpts' ? xptsForSelectedDays(b) - xptsForSelectedDays(a) :
+    (b.xptsTotal ?? 0) - (a.xptsTotal ?? 0)
   );
 
   tbody.innerHTML = rows.slice(0, 200).map(p => {
@@ -3307,6 +3346,7 @@ function renderPlayerBrowser() {
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</td>
       <td>$${p.price}M</td>
       <td class="${(p.xptsTotal ?? 0) > 20 ? 'p-high' : ''}">${(p.xptsTotal ?? 0).toFixed(1)}</td>
+      <td class="${xptsForSelectedDays(p) > 10 ? 'p-high' : ''}">${xptsForSelectedDays(p).toFixed(1)}</td>
       <td>${inSquad
         ? `<button class="btn-secondary btn-sm fantasy-remove-btn" data-id="${p.id}" style="padding:2px 8px">✕</button>`
         : `<button class="btn-primary btn-sm fantasy-add-btn" data-id="${p.id}" style="padding:2px 8px" ${atLimit ? 'disabled' : ''}>+</button>`
@@ -3340,7 +3380,7 @@ function renderPlayerBrowser() {
 function renderFantasyBuilder() {
   if (!state.fantasy.players) {
     document.getElementById('fantasy-players-tbody').innerHTML =
-      `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">${t('fantasyLoading')}</td></tr>`;
+      `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">${t('fantasyLoading')}</td></tr>`;
     loadFantasyPlayers().then(() => {
       renderFilters();
       renderBudgetBar();
@@ -3603,6 +3643,181 @@ async function init() {
         <p style="color:var(--muted)">${t('serverHint')}<code>npm start</code></p>
       </div>`;
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TICKER VIEW
+// ════════════════════════════════════════════════════════════════════════════
+
+let _tickerInterval = null;
+
+function stopTickerRefresh() {
+  if (_tickerInterval) { clearInterval(_tickerInterval); _tickerInterval = null; }
+}
+
+function initTickerView() {
+  fetchAndRenderTicker();
+  stopTickerRefresh();
+  _tickerInterval = setInterval(fetchAndRenderTicker, 60_000);
+}
+
+async function fetchAndRenderTicker() {
+  const el = document.getElementById('ticker-content');
+  if (!el) return;
+  try {
+    const data = await api('/ticker');
+    renderTickerContent(el, data);
+  } catch (err) {
+    el.innerHTML = `<div class="ticker-error">${t('tickerApiError', err.message)}</div>`;
+  }
+}
+
+function renderTickerContent(el, { yesterday = [], today = [], tomorrow = [], fetchedAt }) {
+  const timeStr = fetchedAt
+    ? new Date(fetchedAt).toLocaleTimeString(t('dateLocale'), { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/New_York' })
+    : '—';
+  const anyLive = today.some(m => ['IN_PLAY','EXTRA_TIME','PENALTY_SHOOTOUT','PAUSED'].includes(m.status));
+
+  let html = `
+    <div class="ticker-header">
+      <h2>${t('tickerTitle')}</h2>
+      <div class="ticker-controls">
+        ${anyLive ? '<span class="ticker-live-dot"></span>' : ''}
+        <span class="ticker-updated">${t('tickerLastUpdated', timeStr)}</span>
+        <button class="btn-secondary ticker-refresh-btn" id="ticker-refresh-btn">${t('tickerRefresh')}</button>
+      </div>
+    </div>`;
+
+  // Today
+  html += `<div class="ticker-section-header ticker-section-header--today"><span>${t('tickerToday')}</span></div>`;
+  if (today.length === 0) {
+    html += `<div class="ticker-empty">${t('tickerNoMatches')}</div>`;
+  } else {
+    html += `<div class="ticker-grid">${today.map(tickerMatchCard).join('')}</div>`;
+  }
+
+  // Tomorrow
+  if (tomorrow.length > 0) {
+    html += `
+      <div class="ticker-section-header ticker-section-header--future"><span>${t('tickerTomorrow')}</span></div>
+      <div class="ticker-grid ticker-grid--tomorrow">${tomorrow.map(tickerMatchCard).join('')}</div>`;
+  }
+
+  // Yesterday
+  if (yesterday.length > 0) {
+    html += `
+      <div class="ticker-section-header ticker-section-header--past"><span>${t('tickerYesterday')}</span></div>
+      <div class="ticker-grid ticker-grid--past">${yesterday.map(tickerMatchCard).join('')}</div>`;
+  }
+
+  el.innerHTML = html;
+  document.getElementById('ticker-refresh-btn')?.addEventListener('click', fetchAndRenderTicker);
+}
+
+function tickerMatchCard(m) {
+  const live  = ['IN_PLAY','EXTRA_TIME','PENALTY_SHOOTOUT','PAUSED'].includes(m.status);
+  const group = m.group ? m.group.replace('GROUP_', '') : (m.stage ?? '—');
+
+  return `
+    <div class="ticker-card${live ? ' ticker-card--live' : ''}">
+      <div class="ticker-card-header">
+        <span class="badge badge-group">${t('tickerGroup', group)}</span>
+        ${tickerStatusBadge(m)}
+      </div>
+      <div class="ticker-match">
+        <div class="ticker-team ticker-team--home">
+          ${flag(m.homeTeam.tla)}
+          <span class="ticker-team-name">${m.homeTeam.name}</span>
+        </div>
+        ${tickerScore(m)}
+        <div class="ticker-team ticker-team--away">
+          <span class="ticker-team-name">${m.awayTeam.name}</span>
+          ${flag(m.awayTeam.tla)}
+        </div>
+      </div>
+      ${tickerGoals(m)}
+    </div>`;
+}
+
+function tickerStatusBadge(m) {
+  const dt = new Date(m.utcDate);
+  const timeStr = dt.toLocaleTimeString(t('dateLocale'), { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET';
+  switch (m.status) {
+    case 'TIMED':
+    case 'SCHEDULED':
+      return `<span class="badge badge-upcoming">${timeStr}</span>`;
+    case 'IN_PLAY': {
+      const inj = m.injuryTime ? `+${m.injuryTime}` : '';
+      const min = m.minute != null ? `${m.minute}${inj}'` : t('badgeLive');
+      return `<span class="badge badge-live">${min}</span>`;
+    }
+    case 'EXTRA_TIME': {
+      const min = m.minute != null ? `ET ${m.minute}'` : t('tickerET');
+      return `<span class="badge badge-live">${min}</span>`;
+    }
+    case 'PAUSED':
+      return `<span class="badge badge-live">${t('tickerHT')}</span>`;
+    case 'PENALTY_SHOOTOUT':
+      return `<span class="badge badge-live">${t('tickerPens')}</span>`;
+    case 'FINISHED':
+      return `<span class="badge badge-done">${t('tickerFT')}</span>`;
+    default:
+      return `<span class="badge badge-upcoming">${m.status}</span>`;
+  }
+}
+
+function tickerScore(m) {
+  if (!m.score) {
+    return `<div class="ticker-score ticker-score--upcoming"><span class="ticker-vs">${t('tickerVs')}</span></div>`;
+  }
+  const h = m.score.home ?? 0;
+  const a = m.score.away ?? 0;
+  const ht = m.score.halfTime && m.status === 'FINISHED'
+    ? `<div class="ticker-ht">${t('tickerHT')} ${m.score.halfTime.home}–${m.score.halfTime.away}</div>`
+    : '';
+  return `
+    <div class="ticker-score">
+      <div class="ticker-score-nums">
+        <span class="ticker-score-num">${h}</span>
+        <span class="ticker-score-sep">–</span>
+        <span class="ticker-score-num">${a}</span>
+      </div>
+      ${ht}
+    </div>`;
+}
+
+function tickerGoals(m) {
+  if (!m.goals || m.goals.length === 0) return '';
+
+  // For OWN_GOAL, the `teamTla` is the team that put it in their own net;
+  // display it under the opposing team (they benefited from the goal).
+  const homeGoals = m.goals.filter(g =>
+    g.type === 'OWN_GOAL' ? g.teamTla === m.awayTeam.tla : g.teamTla === m.homeTeam.tla
+  );
+  const awayGoals = m.goals.filter(g =>
+    g.type === 'OWN_GOAL' ? g.teamTla === m.homeTeam.tla : g.teamTla === m.awayTeam.tla
+  );
+
+  const fmtGoal = g => {
+    const min    = g.injuryTime ? `${g.minute}+${g.injuryTime}'` : `${g.minute}'`;
+    const scorer = g.scorer.split(' ').at(-1);
+    if (g.type === 'OWN_GOAL') {
+      return `<span class="ticker-goal">${min} ${scorer} <span class="goal-type">${t('tickerOG')}</span></span>`;
+    }
+    if (g.type === 'PENALTY') {
+      return `<span class="ticker-goal">${min} ${scorer} <span class="goal-type">${t('tickerPen')}</span></span>`;
+    }
+    const assist = g.assist
+      ? ` <span class="ticker-assist">(${g.assist.split(' ').at(-1)})</span>`
+      : '';
+    return `<span class="ticker-goal">${min} ${scorer}${assist}</span>`;
+  };
+
+  return `
+    <div class="ticker-goals">
+      <div class="ticker-goals-col">${homeGoals.map(fmtGoal).join('')}</div>
+      <div class="ticker-goals-col ticker-goals-col--away">${awayGoals.map(fmtGoal).join('')}</div>
+    </div>`;
 }
 
 init();

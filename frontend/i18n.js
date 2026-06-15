@@ -350,6 +350,25 @@ const STRINGS = {
     // Date locale
     dateLocale: 'en-GB',
 
+    // Ticker tab
+    tabTicker:               'Ticker',
+    tickerTitle:             'Today\'s Matches',
+    tickerNoMatches:         'No WC matches scheduled today.',
+    tickerRefresh:           'Refresh',
+    tickerLastUpdated:       time => `Updated ${time}`,
+    tickerHT:                'HT',
+    tickerFT:                'FT',
+    tickerET:                'ET',
+    tickerPens:              'Pens',
+    tickerOG:                'og',
+    tickerPen:               'pen.',
+    tickerGroup:             g => `Group ${g}`,
+    tickerApiError:          msg => `Could not load live scores: ${msg}`,
+    tickerVs:                'vs',
+    tickerToday:             "Today's Matches",
+    tickerYesterday:         "Yesterday's Results",
+    tickerTomorrow:          "Tomorrow's Matches",
+
     // Fantasy tab
     tabFantasy:              'Fantasy',
     fantasyTitle:            'Fantasy XI',
@@ -375,6 +394,8 @@ const STRINGS = {
     fthName:                 'Player',
     fthPrice:                'Price',
     fthXpts:                 'xPts',
+    fthSelXpts:              'Sel.',
+    fantasyGameDayLabel:     'Gameday:',
     fantasyToastFull:        'Squad is full (15 players)',
     fantasyToastPos:         (pos, n) => `${pos} slots full (${n}/${n})`,
     fantasyToastBudget:      'Not enough budget remaining',
@@ -735,6 +756,25 @@ const STRINGS = {
     // Date locale
     dateLocale: 'de-DE',
 
+    // Ticker tab
+    tabTicker:               'Ticker',
+    tickerTitle:             'Heutige Spiele',
+    tickerNoMatches:         'Heute keine WM-Spiele.',
+    tickerRefresh:           'Aktualisieren',
+    tickerLastUpdated:       time => `Aktualisiert ${time}`,
+    tickerHT:                'HZ',
+    tickerFT:                'ET',
+    tickerET:                'VZ',
+    tickerPens:              'Elfm.',
+    tickerOG:                'ET',
+    tickerPen:               'Elfm.',
+    tickerGroup:             g => `Gruppe ${g}`,
+    tickerApiError:          msg => `Live-Daten nicht verfügbar: ${msg}`,
+    tickerVs:                'vs',
+    tickerToday:             'Heutige Spiele',
+    tickerYesterday:         'Gestrige Ergebnisse',
+    tickerTomorrow:          'Morgige Spiele',
+
     // Fantasy tab
     tabFantasy:              'Fantasy',
     fantasyTitle:            'Fantasy XI',
@@ -760,6 +800,8 @@ const STRINGS = {
     fthName:                 'Spieler',
     fthPrice:                'Preis',
     fthXpts:                 'xPkt',
+    fthSelXpts:              'Ausw.',
+    fantasyGameDayLabel:     'Spieltag:',
     fantasyToastFull:        'Kader ist voll (15 Spieler)',
     fantasyToastPos:         (pos, n) => `${pos}-Slots voll (${n}/${n})`,
     fantasyToastBudget:      'Nicht genug Budget',
