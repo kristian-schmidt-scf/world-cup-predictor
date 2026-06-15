@@ -1,7 +1,7 @@
 # World Cup 2026 Prediction Tool
 
 ## Overview
-Interactive web-based tool for predicting World Cup 2026 outcomes using hierarchical Bayesian estimation and Dixon-Coles Poisson modeling. Full Monte Carlo tournament simulation with interactive dashboard, Fantasy WC module, and model comparison mode.
+Interactive web-based tool for predicting World Cup 2026 outcomes using hierarchical Bayesian estimation and Dixon-Coles Poisson modeling. Full Monte Carlo tournament simulation with interactive dashboard, Fantasy WC module, model comparison mode, and real-time live score Ticker.
 
 ## Prediction Scope
 - **Tournament winner**: Probability distribution over all 48 teams
@@ -27,6 +27,7 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 | `fetchSquadStats.js` | Squad market values (€M, Transfermarkt May 2026) and avg squad ages (RotoWire) for all 48 teams |
 | `players.js` | Static: 720 fantasy players (48 teams × 15), positions and prices from official FIFA Fantasy WC 2026 |
 | `playerStats.js` | Individual international career stats for 69 players priced ≥ $7M: goalsPerMatch, assistsPerMatch, yellowsPerMatch, minsPerMatch |
+| `fetchLiveScores.js` | Live WC scores from football-data.org (free tier) + goalscorer/assist enrichment from api-football.com; in-memory cache with adaptive TTLs (60s live, 5min finished, 24h past); robust fixture matching (20-min time window + team-name fallback); Eastern Time date boundaries |
 | `results.js` | Persistent locked match results (JSON file store, survives server restarts) |
 | `cache.js` | File-based JSON cache under `backend/data/cache/`; TTL per key, stale-fallback on network failure |
 | `index.js` | Unified exports; run directly to pre-warm all caches (`npm run data:fetch`) |
@@ -37,6 +38,9 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 - Squad stats: 30-day TTL (stable pre-tournament)
 - Fantasy projections: 24h TTL (keyed `fantasy_projections`)
 - Fixtures / teams / players: static (no TTL)
+- Live scores (`fetchLiveScores.js`, in-memory only): 60s TTL if any match live; 30s if paused; 10min if all finished; 5min otherwise
+- api-football fixture lists: 24h for past UTC dates; 4h for current/future; empty results never cached (retry on next request)
+- api-football goal events: 24h for finished matches (only cached when events > 0); 5min while live
 
 #### Modeling Layer (`backend/models/`)
 
@@ -97,6 +101,7 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 - `GET /api/fantasy/optimise` — optimal 15-player squad within $100M budget
 - `GET /api/history` — filterable, paginated match archive
 - `GET /api/history/curated` — top-5 highest-scoring and biggest-upset matches
+- `GET /api/ticker` — yesterday's results, today's live scores, tomorrow's fixtures (ET date boundaries); enriched with goalscorers + assists
 
 ### Frontend (`frontend/`)
 
@@ -116,6 +121,8 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 
 **Fantasy WC 2026** — Squad Builder (pitch view + player browser + budget bar + Clear all); My Team (xPts table + captain selector); Optimise (best squad button)
 
+**Ticker** — real-time WC match scores; three sections (Today → Tomorrow → Yesterday); live-dot animation; goal scorers + assists with minute, OWN GOAL / PENALTY tags; kickoff times in Eastern Time; auto-refresh every 60s while tab is open; EN/DE
+
 #### Other frontend files
 - `favicon.svg` — soccer ball favicon: dark navy ball, gold bezier seam lines
 - `i18n.js` — EN/DE string table; `t()`, `getLang()`, `setLang()`, `teamName()` exports
@@ -133,6 +140,8 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 | Squad average age | RotoWire projected rosters (May 2026) | No | Update on squad announcement |
 | Fantasy player prices/positions | Official FIFA Fantasy WC 2026 (play.fifa.com/fantasy) | No | Re-verify after June 2 squad announcements |
 | Fantasy player career stats | FBref / Wikipedia (curated, 69 players ≥ $7M) | No | Static pre-tournament |
+| Live WC scores | [football-data.org](https://www.football-data.org/) v4 free tier | Yes (`FOOTBALL_DATA_API_KEY`) | In-memory, adaptive TTL |
+| Goal scorers + assists | [api-football.com](https://www.api-football.com/) v3 free tier (100 req/day) | Yes (`API_FOOTBALL_KEY`) | In-memory, adaptive TTL |
 
 ## Technical Parameters
 
@@ -166,6 +175,7 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
     computeForm.js        # Recent form computation
     computeH2H.js         # Head-to-head record computation
     fetchSquadStats.js    # Market values + avg ages (static table)
+    fetchLiveScores.js    # Live scores (football-data.org) + goalscorer enrichment (api-football.com)
     players.js            # 720 fantasy players (static; re-verify after June 2)
     playerStats.js        # Individual career stats for 69 players ≥ $7M
     results.js            # Persistent locked match results
@@ -185,6 +195,7 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
     fantasy.js            # GET /api/fantasy/players + /api/fantasy/optimise
     results.js
     history.js
+    ticker.js             # GET /api/ticker
   /middleware
     validate.js
   server.js
@@ -214,3 +225,6 @@ Interactive web-based tool for predicting World Cup 2026 outcomes using hierarch
 - Penalty shootout currently modelled as 50/50 — future enhancement: per-team historical shootout data (issue #8)
 - Fantasy player positions sourced from play.fifa.com/fantasy; re-verify the full `players.js` table after official squad announcements on June 2, 2026
 - Fantasy optimiser is greedy + local search — issue #58 tracks improvements (multi-swap pass, random restarts)
+- Ticker goalscorer data (api-football.com) is capped at 100 requests/day on the free tier; resets at UTC midnight. Goalscorers will be missing for matches fetched after the daily cap is hit — this is expected behaviour
+- api-football.com WC 2026 league ID is `1` (FIFA World Cup); date queries use UTC calendar date (`fixture.date`), not ET. football-data.org `utcDate` field is authoritative for kickoff time
+- Ticker uses Eastern Time (`America/New_York`) for all date boundaries (yesterday / today / tomorrow sections); api-football fixture lookups use each match's own UTC calendar date to avoid midnight-UTC edge cases
